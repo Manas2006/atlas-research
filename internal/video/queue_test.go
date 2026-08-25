@@ -18,7 +18,7 @@ func TestLeaseExpiryRetryAndDeadLetter(t *testing.T) {
 	leased, err := queue.Lease("worker-a", 10*time.Second)
 	if err != nil || leased.Attempts != 1 { t.Fatalf("lease: %#v %v", leased, err) }
 	now = now.Add(11 * time.Second)
-	released, err = queue.Lease("worker-b", 10*time.Second)
+	leased, err = queue.Lease("worker-b", 10*time.Second)
 	if err != nil || leased.LeaseOwner != "worker-b" || leased.Attempts != 2 { t.Fatalf("re-lease: %#v %v", leased, err) }
 	dead, err := queue.Fail(leased.ID, "worker-b", "ffmpeg exited", time.Second)
 	if err != nil || dead.State != Dead { t.Fatalf("dead letter: %#v %v", dead, err) }

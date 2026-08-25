@@ -1,5 +1,7 @@
 # Distributed Systems Portfolio
 
+[![CI](https://github.com/Manas2006/distributed-systems-portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/Manas2006/distributed-systems-portfolio/actions/workflows/ci.yml)
+
 Five production-minded systems projects focused on indexing, storage,
 streaming, concurrency, and failure recovery. Each service exposes a small API,
 persists critical state, includes failure-oriented tests, and has explicit
