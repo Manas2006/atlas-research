@@ -1,0 +1,27 @@
+services:
+  atlas:
+    build: .
+    ports:
+      - "8088:8088"
+    volumes:
+      - atlas-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8088/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  media-worker:
+    build: .
+    entrypoint: ["/usr/local/bin/video-worker"]
+    command: ["-id", "compose-worker-1", "-api", "http://atlas:8088/api/video"]
+    volumes:
+      - atlas-data:/data
+    depends_on:
+      atlas:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  atlas-data:

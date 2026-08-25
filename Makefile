@@ -1,4 +1,7 @@
-.PHONY: test test-go test-java fmt search-demo kv-demo analytics-demo video-demo tsdb-demo
+.PHONY: atlas test test-go test-java fmt search-demo kv-demo analytics-demo video-demo tsdb-demo
+
+atlas:
+	go run ./cmd/atlas -listen :8088 -data data/atlas
 
 test: test-go test-java
 

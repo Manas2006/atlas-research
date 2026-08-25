@@ -33,3 +33,12 @@ jobs:
           java-version: '17'
           cache: maven
       - run: mvn --batch-mode test
+
+  console:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: node --check internal/atlas/ui/app.js

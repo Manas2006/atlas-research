@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a0a0d">
+  <meta name="description" content="Search technical knowledge, track experiments, inspect system signals, and process research media.">
+  <title>Atlas Research Console</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#overview" aria-label="Atlas home"><span class="brand-mark">A</span><span>ATLAS</span><small>RESEARCH OS</small></a>
+      <nav aria-label="Workspace">
+        <p class="nav-label">Workspace</p>
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span><span>Overview</span><kbd>1</kbd></button>
+        <button class="nav-item" data-view="knowledge"><span class="nav-icon">⌕</span><span>Knowledge</span><kbd>2</kbd></button>
+        <button class="nav-item" data-view="experiments"><span class="nav-icon">◇</span><span>Experiments</span><kbd>3</kbd></button>
+        <button class="nav-item" data-view="signals"><span class="nav-icon">⌁</span><span>Signals</span><kbd>4</kbd></button>
+        <button class="nav-item" data-view="media"><span class="nav-icon">▷</span><span>Media jobs</span><kbd>5</kbd></button>
+      </nav>
+      <div class="sidebar-foot">
+        <p class="nav-label">Runtime</p>
+        <button id="runtimeButton" class="runtime"><i class="status-dot"></i><span><strong>Browser mode</strong><small>Stored on this device</small></span><span>›</span></button>
+        <a class="source-link" href="https://github.com/Manas2006/distributed-systems-portfolio" target="_blank" rel="noreferrer">View source on GitHub ↗</a>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <button id="commandButton" class="command-button"><span>⌕</span><span>Search workspace</span><kbd>⌘ K</kbd></button>
+        <div class="top-actions"><span id="systemState" class="system-state"><i class="status-dot live"></i>Ready</span><a href="https://github.com/Manas2006/distributed-systems-portfolio" target="_blank" rel="noreferrer" class="square-button" aria-label="Open GitHub">↗</a><div class="avatar">MP</div></div>
+      </header>
+      <div id="workspace" class="content" aria-live="polite"></div>
+    </main>
+  </div>
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+.git
+.github
+data
+event-analytics
+docs
+scripts
+**/*_test.go
