@@ -3,11 +3,13 @@ package atlas
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Manas2006/atlas-research/internal/collab"
 )
@@ -42,6 +44,65 @@ func TestServerIndexesAndSearchesEntries(t *testing.T) {
 	}
 	if len(body.Results) != 1 || body.Results[0].Entry.Title != "Lease recovery" {
 		t.Fatalf("unexpected search results: %+v", body.Results)
+	}
+}
+
+func TestImpactExperimentAPIValidationLifecycleAndSearchConclusion(t *testing.T) {
+	server, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	handler := server.Handler()
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(method, target, strings.NewReader(body))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+	invalid := do(http.MethodPost, "/api/impact-experiments", `{"name":"missing fields"}`)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid create returned %d", invalid.Code)
+	}
+	created := do(http.MethodPost, "/api/impact-experiments", `{"name":"Campaign holdout","hypothesis":"campaign causes incremental orders","outcome_name":"order","treatment_allocation":0.5,"observation_window_seconds":3600}`)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", created.Code, created.Body.String())
+	}
+	var body struct {
+		Experiment struct {
+			ID string `json:"id"`
+		} `json:"experiment"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &body); err != nil || body.Experiment.ID == "" {
+		t.Fatalf("create body: %v %s", err, created.Body.String())
+	}
+	id := body.Experiment.ID
+	started := do(http.MethodPost, "/api/impact-experiments/"+id+"/start", "")
+	if started.Code != http.StatusOK {
+		t.Fatalf("start: %d %s", started.Code, started.Body.String())
+	}
+	assignment := do(http.MethodPost, "/api/impact-experiments/"+id+"/assignments", `{"subject_id":"synthetic-person-1"}`)
+	var assigned struct {
+		Arm           string `json:"arm"`
+		ConfigVersion int    `json:"config_version"`
+	}
+	if err := json.Unmarshal(assignment.Body.Bytes(), &assigned); err != nil || assigned.Arm == "" {
+		t.Fatalf("assignment: %d %s", assignment.Code, assignment.Body.String())
+	}
+	now := time.Now().UTC()
+	events := fmt.Sprintf(`{"events":[{"event_id":"exposure","type":"exposure","subject_id":"synthetic-person-1","arm":%q,"event_timestamp":%q,"config_version":1},{"event_id":"outcome","type":"outcome","subject_id":"synthetic-person-1","arm":%q,"event_timestamp":%q,"outcome_name":"order","value":42,"config_version":1}]}`, assigned.Arm, now.Format(time.RFC3339Nano), assigned.Arm, now.Add(time.Minute).Format(time.RFC3339Nano))
+	ingested := do(http.MethodPost, "/api/impact-experiments/"+id+"/events", events)
+	if ingested.Code != http.StatusAccepted || !strings.Contains(ingested.Body.String(), `"accepted":2`) {
+		t.Fatalf("ingest: %d %s", ingested.Code, ingested.Body.String())
+	}
+	stopped := do(http.MethodPost, "/api/impact-experiments/"+id+"/stop", "")
+	if stopped.Code != http.StatusOK || !strings.Contains(stopped.Body.String(), `"knowledge_entry"`) {
+		t.Fatalf("stop: %d %s", stopped.Code, stopped.Body.String())
+	}
+	searched := do(http.MethodGet, "/api/search?q=incremental+orders", "")
+	if searched.Code != http.StatusOK || !strings.Contains(searched.Body.String(), "Impact conclusion: Campaign holdout") {
+		t.Fatalf("conclusion not searchable: %d %s", searched.Code, searched.Body.String())
 	}
 }
 

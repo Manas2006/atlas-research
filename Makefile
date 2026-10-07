@@ -1,21 +1,28 @@
-.PHONY: atlas test test-go test-java test-js fmt search-demo kv-demo analytics-demo video-demo tsdb-demo collab-demo collab-load
+.PHONY: atlas test test-go test-vet test-java test-js test-e2e fmt search-demo kv-demo analytics-demo impact-demo video-demo tsdb-demo collab-demo collab-load
 
 atlas:
 	go run ./cmd/atlas -listen :8088 -data data/atlas
 
-test: test-go test-java test-js
+test: test-go test-vet test-java test-js test-e2e
 
 test-go:
 	go test -race ./...
 
+test-vet:
+	go vet ./...
+
 test-java:
-	cd event-analytics && mvn test
+	cd engineering-labs/pulse-analytics && mvn --batch-mode test
 
 test-js:
-	node --test internal/atlas/uitests/ot.test.js
+	for file in ot collab docs app; do node --check "internal/atlas/ui/$$file.js"; done
+	node --test internal/atlas/uitests/*.test.js
+
+test-e2e:
+	node internal/atlas/uitests/e2e.js
 
 fmt:
-	gofmt -w $$(find cmd internal -name '*.go')
+	gofmt -w $$(find cmd internal engineering-labs -name '*.go')
 
 search-demo:
 	./scripts/search-demo.sh
@@ -24,7 +31,10 @@ kv-demo:
 	./scripts/kv-demo.sh
 
 analytics-demo:
-	docker compose -f event-analytics/docker-compose.yml up --build
+	docker compose -f engineering-labs/pulse-analytics/docker-compose.yml up --build
+
+impact-demo:
+	go run ./cmd/impact-demo
 
 video-demo:
 	./scripts/video-demo.sh

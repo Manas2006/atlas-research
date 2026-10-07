@@ -1,5 +1,8 @@
 # Quorum KV
 
+> **Engineering lab:** Quorum KV is a standalone Raft implementation. The Atlas
+> runtime does not depend on it.
+
 Quorum KV is a replicated key-value store implementing the core Raft protocol:
 randomized leader election, log matching, majority replication, ordered commit,
 and follower repair after divergent logs. The state machine adds TTL values,
@@ -20,9 +23,9 @@ membership changes, batched fsync, and log compaction after snapshots.
 ## Run a three-node cluster
 
 ```bash
-go run ./cmd/kv-node -id n1 -listen :9001 -data data/n1
-go run ./cmd/kv-node -id n2 -listen :9002 -data data/n2
-go run ./cmd/kv-node -id n3 -listen :9003 -data data/n3
+go run ./engineering-labs/quorum-kv/cmd/kv-node -id n1 -listen :9001 -data data/n1
+go run ./engineering-labs/quorum-kv/cmd/kv-node -id n2 -listen :9002 -data data/n2
+go run ./engineering-labs/quorum-kv/cmd/kv-node -id n3 -listen :9003 -data data/n3
 
 curl -X PUT localhost:9001/v1/kv/course \
   -H 'content-type: application/json' -d '{"value":"distributed-systems","ttl_seconds":60}'
@@ -36,9 +39,8 @@ leader hint for client operations.
 ## Failure tests
 
 ```bash
-go test -race ./internal/kv
+go test -race ./engineering-labs/quorum-kv/internal/kv
 ```
 
 The test transport drops selected nodes and verifies that one failure retains
 write availability while loss of a majority prevents acknowledgement.
-

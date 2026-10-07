@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Manas2006/atlas-research/internal/collab"
+	"github.com/Manas2006/atlas-research/internal/experiments"
 	"github.com/Manas2006/atlas-research/internal/search"
 	"github.com/Manas2006/atlas-research/internal/tsdb"
 	"github.com/Manas2006/atlas-research/internal/video"
@@ -38,6 +39,7 @@ type Server struct {
 	index       *search.Index
 	wal         *search.WAL
 	metrics     *tsdb.Store
+	impact      *experiments.Engine
 	video       http.Handler
 	queue       *video.Queue
 	started     time.Time
@@ -97,19 +99,27 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 		wal.Close()
 		return nil, err
 	}
+	impact, err := experiments.Open(filepath.Join(dataDir, "impact", "events.wal"))
+	if err != nil {
+		metrics.Close()
+		wal.Close()
+		return nil, err
+	}
 	queue, err := video.OpenQueue(filepath.Join(dataDir, "video", "jobs.json"))
 	if err != nil {
+		impact.Close()
 		metrics.Close()
 		wal.Close()
 		return nil, err
 	}
 	objects, err := video.NewObjectStore(filepath.Join(dataDir, "video", "objects"))
 	if err != nil {
+		impact.Close()
 		metrics.Close()
 		wal.Close()
 		return nil, err
 	}
-	server := &Server{catalog: catalog, index: index, wal: wal, metrics: metrics, queue: queue, video: (&video.API{Queue: queue, Store: objects}).Handler(), started: time.Now().UTC()}
+	server := &Server{catalog: catalog, index: index, wal: wal, metrics: metrics, impact: impact, queue: queue, video: (&video.API{Queue: queue, Store: objects}).Handler(), started: time.Now().UTC()}
 	for _, origin := range options.AllowedOrigins {
 		if origin = strings.TrimRight(strings.TrimSpace(origin), "/"); origin != "" {
 			server.origins = append(server.origins, origin)
@@ -123,6 +133,7 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 	if options.Writer != nil {
 		writer, err := collab.NewWriter(*options.Writer)
 		if err != nil {
+			impact.Close()
 			metrics.Close()
 			wal.Close()
 			return nil, err
@@ -131,6 +142,7 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 	}
 	docs, err := collab.OpenStore(filepath.Join(dataDir, "docs"), collabOptions)
 	if err != nil {
+		impact.Close()
 		metrics.Close()
 		wal.Close()
 		return nil, err
@@ -184,6 +196,11 @@ func (s *Server) agentSearch(query string, limit int) []collab.Hit {
 func (s *Server) Close() error {
 	// Docs first: each session flushes the edits it has already accepted.
 	_ = s.docs.Close()
+	if err := s.impact.Close(); err != nil {
+		_ = s.metrics.Close()
+		_ = s.wal.Close()
+		return err
+	}
 	if err := s.metrics.Close(); err != nil {
 		_ = s.wal.Close()
 		return err
@@ -200,6 +217,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("POST /api/runs", s.runs)
 	mux.HandleFunc("PUT /api/runs/{id}", s.updateRun)
+	mux.HandleFunc("GET /api/impact-experiments", s.impactExperiments)
+	mux.HandleFunc("POST /api/impact-experiments", s.impactExperiments)
+	mux.HandleFunc("GET /api/impact-experiments/{id}", s.impactExperiment)
+	mux.HandleFunc("POST /api/impact-experiments/{id}/start", s.startImpactExperiment)
+	mux.HandleFunc("POST /api/impact-experiments/{id}/stop", s.stopImpactExperiment)
+	mux.HandleFunc("POST /api/impact-experiments/{id}/assignments", s.assignImpactSubject)
+	mux.HandleFunc("POST /api/impact-experiments/{id}/events", s.ingestImpactEvents)
+	mux.HandleFunc("POST /api/impact-experiments/{id}/demo", s.runImpactDemo)
 	mux.HandleFunc("GET /api/signals", s.signals)
 	mux.Handle("/api/metrics/", http.StripPrefix("/api/metrics", (&tsdb.API{Store: s.metrics}).Handler()))
 	mux.Handle("/api/video/", http.StripPrefix("/api/video", s.video))
@@ -214,7 +239,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	entries, runs := s.catalog.Counts()
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mode": "connected", "uptime_seconds": int64(time.Since(s.started).Seconds()), "documents": s.index.Len(), "entries": entries, "runs": runs, "docs": s.docs.Count(), "metric_series": s.metrics.SeriesCount(), "media_jobs": len(s.queue.List())})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mode": "connected", "uptime_seconds": int64(time.Since(s.started).Seconds()), "documents": s.index.Len(), "entries": entries, "runs": runs, "impact_experiments": s.impact.Count(), "docs": s.docs.Count(), "metric_series": s.metrics.SeriesCount(), "media_jobs": len(s.queue.List())})
 }
 
 func (s *Server) entries(w http.ResponseWriter, r *http.Request) {

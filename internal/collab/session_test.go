@@ -520,7 +520,7 @@ func TestAgentShowsUpInPresenceWhileWorking(t *testing.T) {
 
 // BenchmarkReplay measures how fast a document reopens from its log. Every
 // operation copies the text, so the cost grows with both history and size;
-// see docs/live-docs.md for what that means in practice.
+// see docs/components/live-docs.md for what that means in practice.
 func BenchmarkReplay(b *testing.B) {
 	const keystrokes = 20_000
 	author := Author{ID: "u", Name: "u", Kind: KindHuman}

@@ -121,4 +121,3 @@ func ReadSnapshot(source io.Reader) (*Index, error) {
 	}
 	return index, nil
 }
-

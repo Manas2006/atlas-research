@@ -24,6 +24,16 @@ Increase producer rate until processing lag grows for three consecutive
 minutes. Record the last stable event rate, duplicate rate, late-event rate,
 consumer count, partition count, and p95 end-to-end lag.
 
+## Impact Experiments
+
+Use a fixed seed, subject count, control conversion rate, absolute ground-truth
+lift, attribution window, lateness bound, and duplicate percentage. Run five
+trials of both uninterrupted processing and a restart/redelivery at 50 percent.
+Record events processed/second, p50/p95 processing lag, watermark lag, duplicate
+and late-event rates, live subject-state count, WAL size, restart recovery time,
+and absolute difference between estimated and known lift. Verify that both runs
+finish with identical sample/conversion aggregates before publishing numbers.
+
 ## Video
 
 Use fixed one-minute 1080p inputs. Record completion latency, worker CPU,

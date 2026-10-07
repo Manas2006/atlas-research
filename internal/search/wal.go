@@ -73,4 +73,3 @@ func (w *WAL) Replay(apply func(Document) error) error {
 }
 
 func (w *WAL) Close() error { return w.file.Close() }
-

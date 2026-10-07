@@ -1,5 +1,8 @@
 # Pulse Analytics
 
+> **Engineering lab:** Pulse is standalone and is not required by the Atlas
+> runtime or its Impact Experiments workflow.
+
 Pulse is a Java 17 and Kafka event-processing service for impression, click,
 view, and conversion streams. Events are keyed by campaign so Kafka preserves
 per-campaign ordering while partitions scale across consumer instances.
@@ -17,7 +20,8 @@ per-campaign ordering while partitions scale across consumer instances.
 ## Run
 
 ```bash
-docker compose up --build
+docker compose -f engineering-labs/pulse-analytics/docker-compose.yml up --build
+cd engineering-labs/pulse-analytics
 mvn -q exec:java -Dexec.mainClass=dev.manaspathak.pulse.EventGenerator \
   -Dexec.args='localhost:9092 engagement-events 10000'
 curl 'localhost:7070/v1/metrics?campaign=campaign-1&limit=10'
@@ -36,4 +40,3 @@ mvn test
 The aggregation tests cover duplicate delivery, late events, window boundaries,
 and conversion-value totals. An end-to-end benchmark should additionally run
 against a multi-broker Kafka cluster with replication factor three.
-

@@ -24,16 +24,16 @@ type Entry struct {
 }
 
 type Run struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Model     string            `json:"model"`
-	Dataset   string            `json:"dataset"`
-	Status    string            `json:"status"`
-	Score     *float64          `json:"score,omitempty"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Model      string            `json:"model"`
+	Dataset    string            `json:"dataset"`
+	Status     string            `json:"status"`
+	Score      *float64          `json:"score,omitempty"`
 	Parameters map[string]string `json:"parameters,omitempty"`
-	Notes     string            `json:"notes,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	Notes      string            `json:"notes,omitempty"`
+	CreatedAt  time.Time         `json:"created_at"`
+	UpdatedAt  time.Time         `json:"updated_at"`
 }
 
 type catalogFile struct {

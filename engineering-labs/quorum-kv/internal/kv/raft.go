@@ -129,7 +129,10 @@ func (n *Node) electionLoop() {
 			return
 		case <-n.resetElection:
 			if !timer.Stop() {
-				select { case <-timer.C: default: }
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
 			timer.Reset(n.randomElectionTimeout())
 		case <-timer.C:
@@ -384,7 +387,9 @@ func (n *Node) quorumHeartbeat(ctx context.Context) bool {
 	for acks < needed {
 		select {
 		case ok := <-responses:
-			if ok { acks++ }
+			if ok {
+				acks++
+			}
 		case <-ctx.Done():
 			return false
 		}
@@ -436,6 +441,8 @@ func (n *Node) persistMetadataLocked() error {
 }
 
 func (n *Node) signalElectionReset() {
-	select { case n.resetElection <- struct{}{}: default: }
+	select {
+	case n.resetElection <- struct{}{}:
+	default:
+	}
 }
-

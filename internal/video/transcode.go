@@ -23,14 +23,20 @@ var defaultRenditions = []Rendition{
 	{Name: "1080p", Width: 1920, VideoRate: "5000k", Bandwidth: 5400000},
 }
 
-type Transcoder struct { FFmpeg string }
+type Transcoder struct{ FFmpeg string }
 
 func (t Transcoder) Transcode(ctx context.Context, job Job) error {
 	ffmpeg := t.FFmpeg
-	if ffmpeg == "" { ffmpeg = "ffmpeg" }
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
+	}
 	temporary := job.OutputPath + ".work"
-	if err := os.RemoveAll(temporary); err != nil { return err }
-	if err := os.MkdirAll(temporary, 0o700); err != nil { return err }
+	if err := os.RemoveAll(temporary); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(temporary, 0o700); err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -41,7 +47,11 @@ func (t Transcoder) Transcode(ctx context.Context, job Job) error {
 		go func(profile Rendition) {
 			defer workers.Done()
 			directory := filepath.Join(temporary, profile.Name)
-			if err := os.MkdirAll(directory, 0o700); err != nil { errorsByRendition <- err; cancel(); return }
+			if err := os.MkdirAll(directory, 0o700); err != nil {
+				errorsByRendition <- err
+				cancel()
+				return
+			}
 			command := exec.CommandContext(ctx, ffmpeg,
 				"-hide_banner", "-loglevel", "error", "-y", "-i", job.InputPath,
 				"-map", "0:v:0", "-map", "0:a:0?", "-vf", fmt.Sprintf("scale=%d:-2", profile.Width),
@@ -59,10 +69,18 @@ func (t Transcoder) Transcode(ctx context.Context, job Job) error {
 	workers.Wait()
 	close(errorsByRendition)
 	var failures []error
-	for err := range errorsByRendition { failures = append(failures, err) }
-	if len(failures) > 0 { return errors.Join(failures...) }
-	if err := writeMasterPlaylist(temporary); err != nil { return err }
-	if err := os.RemoveAll(job.OutputPath); err != nil { return err }
+	for err := range errorsByRendition {
+		failures = append(failures, err)
+	}
+	if len(failures) > 0 {
+		return errors.Join(failures...)
+	}
+	if err := writeMasterPlaylist(temporary); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(job.OutputPath); err != nil {
+		return err
+	}
 	return os.Rename(temporary, job.OutputPath)
 }
 
@@ -74,4 +92,3 @@ func writeMasterPlaylist(root string) error {
 	}
 	return os.WriteFile(filepath.Join(root, "master.m3u8"), []byte(manifest), 0o600)
 }
-

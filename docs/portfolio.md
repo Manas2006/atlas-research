@@ -12,6 +12,26 @@ protocol. Link the repository and a short architecture note from the resume.
   recovery, restoring acknowledged updates in **R seconds** during injected
   process failures.
 
+## Impact Experiments
+
+> Built a fault-tolerant streaming experiment engine that joins delayed outcomes
+> to treatment and control exposures, estimates conversion lift with confidence
+> intervals, and preserves results through duplicate delivery, consumer
+> rebalances, and process crashes.
+
+- Dataset/seed: **N / SEED** synthetic subjects with **C percent** control rate,
+  **L percentage-point** known lift, **D percent** duplicate delivery, and an
+  injected restart/redelivery at **R percent** of the stream.
+- Measured **E events/second**, **P50 ms** p50 and **P95 ms** p95 processing lag,
+  **W ms** watermark lag, **S bytes/subjects** state size, and **T ms** restart
+  recovery time.
+- Estimated lift was **EL percentage points** (95% CI **LOW to HIGH**), an
+  absolute error of **ERR percentage points** from the known synthetic lift;
+  uninterrupted and recovered aggregate checksums were **CHECKSUM / CHECKSUM**.
+
+Leave every placeholder above intact until the full procedure in
+`docs/benchmarking.md` has been reproduced on recorded hardware.
+
 ## Quorum KV
 
 - Implemented a replicated key-value store in Go with Raft leader election,

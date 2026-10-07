@@ -39,12 +39,18 @@ func (t *HTTPTransport) post(ctx context.Context, peer, path string, input, outp
 	}
 	payload, _ := json.Marshal(input)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+path, bytes.NewReader(payload))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	response, err := t.Client.Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer response.Body.Close()
-	if response.StatusCode/100 != 2 { return errors.New(response.Status) }
+	if response.StatusCode/100 != 2 {
+		return errors.New(response.Status)
+	}
 	return json.NewDecoder(response.Body).Decode(output)
 }
 
@@ -52,12 +58,18 @@ func (n *Node) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /raft/request-vote", func(w http.ResponseWriter, r *http.Request) {
 		var request RequestVoteRequest
-		if json.NewDecoder(r.Body).Decode(&request) != nil { http.Error(w, "invalid JSON", http.StatusBadRequest); return }
+		if json.NewDecoder(r.Body).Decode(&request) != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
 		writeKVJSON(w, http.StatusOK, n.HandleRequestVote(request))
 	})
 	mux.HandleFunc("POST /raft/append-entries", func(w http.ResponseWriter, r *http.Request) {
 		var request AppendEntriesRequest
-		if json.NewDecoder(r.Body).Decode(&request) != nil { http.Error(w, "invalid JSON", http.StatusBadRequest); return }
+		if json.NewDecoder(r.Body).Decode(&request) != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
 		writeKVJSON(w, http.StatusOK, n.HandleAppendEntries(request))
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -69,7 +81,10 @@ func (n *Node) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/kv/{key}", n.handleDelete)
 	mux.HandleFunc("GET /v1/range", n.handleRange)
 	mux.HandleFunc("POST /v1/admin/snapshot", func(w http.ResponseWriter, _ *http.Request) {
-		if err := n.Snapshot(); err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
+		if err := n.Snapshot(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writeKVJSON(w, http.StatusOK, map[string]string{"status": "created"})
 	})
 	return mux
@@ -82,13 +97,21 @@ type putRequest struct {
 
 func (n *Node) handlePut(w http.ResponseWriter, r *http.Request) {
 	var input putRequest
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input) != nil { http.Error(w, "invalid JSON", http.StatusBadRequest); return }
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input) != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
 	command := Command{Operation: Put, Key: r.PathValue("key"), Value: input.Value}
-	if input.TTLSeconds > 0 { command.ExpiresAt = time.Now().Add(time.Duration(input.TTLSeconds) * time.Second).UnixNano() }
+	if input.TTLSeconds > 0 {
+		command.ExpiresAt = time.Now().Add(time.Duration(input.TTLSeconds) * time.Second).UnixNano()
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 	index, err := n.Propose(ctx, command)
-	if err != nil { n.writeLeaderError(w, err); return }
+	if err != nil {
+		n.writeLeaderError(w, err)
+		return
+	}
 	writeKVJSON(w, http.StatusOK, map[string]any{"index": index})
 }
 
@@ -96,7 +119,10 @@ func (n *Node) handleDelete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 	index, err := n.Propose(ctx, Command{Operation: Delete, Key: r.PathValue("key")})
-	if err != nil { n.writeLeaderError(w, err); return }
+	if err != nil {
+		n.writeLeaderError(w, err)
+		return
+	}
 	writeKVJSON(w, http.StatusOK, map[string]any{"index": index})
 }
 
@@ -104,23 +130,36 @@ func (n *Node) handleGet(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
 	defer cancel()
 	value, ok, err := n.LinearizableGet(ctx, r.PathValue("key"))
-	if err != nil { n.writeLeaderError(w, err); return }
-	if !ok { http.Error(w, "not found", http.StatusNotFound); return }
+	if err != nil {
+		n.writeLeaderError(w, err)
+		return
+	}
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	writeKVJSON(w, http.StatusOK, map[string]string{"key": r.PathValue("key"), "value": value})
 }
 
 func (n *Node) handleRange(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 || limit > 1000 { limit = 100 }
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
 	items, err := n.LinearizableRange(r.Context(), r.URL.Query().Get("start"), r.URL.Query().Get("end"), r.URL.Query().Get("prefix"), limit)
-	if err != nil { n.writeLeaderError(w, err); return }
+	if err != nil {
+		n.writeLeaderError(w, err)
+		return
+	}
 	writeKVJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (n *Node) writeLeaderError(w http.ResponseWriter, err error) {
 	_, _, leader, _ := n.Status()
 	status := http.StatusServiceUnavailable
-	if errors.Is(err, ErrNotLeader) { status = http.StatusTemporaryRedirect }
+	if errors.Is(err, ErrNotLeader) {
+		status = http.StatusTemporaryRedirect
+	}
 	if leaderURL, ok := n.transport.(*HTTPTransport); ok && leader != "" && leaderURL.URLs[leader] != "" {
 		w.Header().Set("Location", leaderURL.URLs[leader])
 	}

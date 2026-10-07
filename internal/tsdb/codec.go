@@ -16,7 +16,9 @@ type Sample struct {
 // compression. It is intentionally simple and byte-aligned so the format is
 // easy to inspect and fuzz.
 func encodeSamples(input []Sample) []byte {
-	if len(input) == 0 { return []byte{0} }
+	if len(input) == 0 {
+		return []byte{0}
+	}
 	samples := append([]Sample(nil), input...)
 	sort.SliceStable(samples, func(i, j int) bool { return samples[i].Timestamp < samples[j].Timestamp })
 	deduplicated := samples[:0]
@@ -33,7 +35,9 @@ func encodeSamples(input []Sample) []byte {
 	result = appendVarint(result, samples[0].Timestamp)
 	previousBits := math.Float64bits(samples[0].Value)
 	result = appendUvarint(result, previousBits)
-	if len(samples) == 1 { return result }
+	if len(samples) == 1 {
+		return result
+	}
 	previousDelta := samples[1].Timestamp - samples[0].Timestamp
 	result = appendVarint(result, previousDelta)
 	bits := math.Float64bits(samples[1].Value)
@@ -51,33 +55,51 @@ func encodeSamples(input []Sample) []byte {
 
 func decodeSamples(encoded []byte) ([]Sample, error) {
 	count, read := binary.Uvarint(encoded)
-	if read <= 0 { return nil, errors.New("invalid sample count") }
+	if read <= 0 {
+		return nil, errors.New("invalid sample count")
+	}
 	encoded = encoded[read:]
-	if count == 0 { return nil, nil }
+	if count == 0 {
+		return nil, nil
+	}
 	timestamp, read := binary.Varint(encoded)
-	if read <= 0 { return nil, errors.New("invalid first timestamp") }
+	if read <= 0 {
+		return nil, errors.New("invalid first timestamp")
+	}
 	encoded = encoded[read:]
 	bits, read := binary.Uvarint(encoded)
-	if read <= 0 { return nil, errors.New("invalid first value") }
+	if read <= 0 {
+		return nil, errors.New("invalid first value")
+	}
 	encoded = encoded[read:]
 	result := make([]Sample, 0, count)
 	result = append(result, Sample{Timestamp: timestamp, Value: math.Float64frombits(bits)})
-	if count == 1 { return result, nil }
+	if count == 1 {
+		return result, nil
+	}
 	delta, read := binary.Varint(encoded)
-	if read <= 0 { return nil, errors.New("invalid first delta") }
+	if read <= 0 {
+		return nil, errors.New("invalid first delta")
+	}
 	encoded = encoded[read:]
 	xor, read := binary.Uvarint(encoded)
-	if read <= 0 { return nil, errors.New("invalid value xor") }
+	if read <= 0 {
+		return nil, errors.New("invalid value xor")
+	}
 	encoded = encoded[read:]
 	bits ^= xor
 	timestamp += delta
 	result = append(result, Sample{Timestamp: timestamp, Value: math.Float64frombits(bits)})
 	for index := uint64(2); index < count; index++ {
 		deltaOfDelta, n := binary.Varint(encoded)
-		if n <= 0 { return nil, errors.New("invalid delta of delta") }
+		if n <= 0 {
+			return nil, errors.New("invalid delta of delta")
+		}
 		encoded = encoded[n:]
 		xor, n = binary.Uvarint(encoded)
-		if n <= 0 { return nil, errors.New("invalid value xor") }
+		if n <= 0 {
+			return nil, errors.New("invalid value xor")
+		}
 		encoded = encoded[n:]
 		delta += deltaOfDelta
 		timestamp += delta
@@ -98,4 +120,3 @@ func appendVarint(destination []byte, value int64) []byte {
 	n := binary.PutVarint(scratch[:], value)
 	return append(destination, scratch[:n]...)
 }
-

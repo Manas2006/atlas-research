@@ -1,6 +1,8 @@
 services:
   atlas:
-    build: .
+    build:
+      context: .
+      target: atlas-runtime
     ports:
       - "8088:8088"
     volumes:
@@ -13,7 +15,10 @@ services:
       retries: 5
 
   media-worker:
-    build: .
+    profiles: ["media"]
+    build:
+      context: .
+      target: media-runtime
     entrypoint: ["/usr/local/bin/video-worker"]
     command: ["-id", "compose-worker-1", "-api", "http://atlas:8088/api/video"]
     volumes:

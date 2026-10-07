@@ -159,4 +159,3 @@ func (s *LogStore) LoadSnapshot(machine *StateMachine) (uint64, error) {
 	machine.replaceData(snapshot.Data)
 	return snapshot.LastApplied, nil
 }
-

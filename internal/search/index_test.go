@@ -72,4 +72,3 @@ func BenchmarkSearch(b *testing.B) {
 		_ = index.Search("replication ranking", 10)
 	}
 }
-

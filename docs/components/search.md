@@ -49,6 +49,5 @@ go test -bench BenchmarkSearch -benchmem ./internal/search
 
 The wire contract is JSON over HTTP so the implementation remains buildable
 with only the Go standard library. Production evolution would generate clients
-from `api/search.proto`, add streaming bulk ingestion, and normalize BM25 scores
+from `internal/search/api/search.proto`, add streaming bulk ingestion, and normalize BM25 scores
 globally rather than merging shard-local scores directly.
-

@@ -6,13 +6,14 @@ The console has two useful modes:
 
 1. **Browser mode** keeps knowledge entries and experiment records created by
    the user in local storage. It works directly from GitHub Pages without an
-   account or backend. Runtime signals, media jobs, and live docs require a
-   connected Atlas service. Empty screens display no invented records.
+   account or backend. Impact Experiments, runtime signals, media jobs, and
+   live docs require a connected Atlas service. Empty screens display no
+   invented records.
 2. **Connected mode** sends records to the Go runtime. Entries are durably
    stored, appended to the search WAL, and indexed with BM25. Signals and the
    last 12 minutes of request counts come from the running process; the history
-   resets when it restarts. Metrics use Chronos, and media jobs are read from
-   the persisted StreamForge queue.
+   resets when it restarts. Impact experiment state is replayed from its own
+   WAL, metrics use Chronos, and optional media jobs come from StreamForge.
 
 Use the Runtime control under the navigation to change modes. Connection
 settings stay on the current device.
@@ -28,8 +29,9 @@ settings stay on the current device.
 | `docs/<id>.oplog` | One live doc: every edit, suggestion, and decision, in order |
 | `docs/.lock` | Held while a process owns the docs, so a second one cannot start on them |
 | `metrics/` | Chronos WAL and immutable metric blocks |
-| `video/jobs.json` | Durable media queue and idempotency keys |
-| `video/objects/` | Uploaded objects and HLS outputs |
+| `impact/events.wal` | Impact configurations, delivery batches, event IDs, and replay source |
+| `video/jobs.json` | Optional durable media queue and idempotency keys |
+| `video/objects/` | Optional uploaded objects and HLS outputs |
 
 The Docker setup mounts the same layout at `/data` in a named volume.
 
@@ -42,6 +44,13 @@ The Docker setup mounts the same layout at `/data` in a named volume.
 | `GET` | `/api/search?q=...` | Ranked BM25 retrieval |
 | `GET`, `POST` | `/api/runs` | List or create experiment records |
 | `PUT` | `/api/runs/{id}` | Replace an experiment record |
+| `GET`, `POST` | `/api/impact-experiments` | List impact results or create a draft |
+| `GET` | `/api/impact-experiments/{id}` | Configuration, result, convergence, diagnostics |
+| `POST` | `/api/impact-experiments/{id}/start` | Begin collection |
+| `POST` | `/api/impact-experiments/{id}/stop` | Complete and index a conclusion |
+| `POST` | `/api/impact-experiments/{id}/assignments` | Resolve/persist a stable assignment |
+| `POST` | `/api/impact-experiments/{id}/events` | Ingest one event or a delivery batch |
+| `POST` | `/api/impact-experiments/{id}/demo` | Run the synthetic advertising reference data |
 | `GET`, `POST` | `/api/docs` | List live docs, agents, and templates, or create a doc |
 | `GET` | `/api/docs/{id}` | Current text, revision, and open suggestions |
 | `GET` | `/api/docs/{id}/ws` | WebSocket for live editing |
@@ -87,7 +96,21 @@ suggestion and `by` naming who accepted it.
 
 If a doc's log cannot be replayed, Atlas starts without that doc, lists it as
 damaged on the Live docs page, and leaves the file as it found it. See the
-[design note](live-docs.md) for the protocol and its limits.
+[design note](components/live-docs.md) for the protocol and its limits.
+
+## Impact event example
+
+The [Impact Experiments design note](components/impact-experiments.md) defines
+the statistics and recovery contract. Events use pseudonymous subject IDs:
+
+```bash
+curl -X POST http://localhost:8088/api/impact-experiments/EXPERIMENT_ID/events \
+  -H 'Content-Type: application/json' \
+  -d '{"events":[
+    {"event_id":"imp-1","type":"exposure","subject_id":"anon-42","arm":"treatment","event_timestamp":"2026-10-07T16:00:00Z","config_version":1},
+    {"event_id":"order-1","type":"outcome","subject_id":"anon-42","arm":"treatment","event_timestamp":"2026-10-07T16:15:00Z","outcome_name":"conversion","value":42,"config_version":1}
+  ]}'
+```
 
 ## Look
 
@@ -103,7 +126,8 @@ Open Font License; the license texts sit beside the font files.
 
 ## Extending the distributed topology
 
-Use the standalone binaries when testing multiple processes and failures. Atlas
-Search supports shard fan-out and replica fallback, Quorum KV provides Raft
-replication, Pulse Analytics runs against Kafka, and the media worker can scale
-horizontally because queue ownership is protected by leases.
+Use the standalone Search and Chronos binaries when testing product packages at
+multiple-process scale. The standalone Quorum KV and Pulse Analytics projects
+are explicitly optional engineering labs under `engineering-labs/`; Atlas does
+not call them. The optional media worker scales horizontally because queue
+ownership is protected by leases.

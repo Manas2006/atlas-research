@@ -99,4 +99,3 @@ func (s *StateMachine) replaceData(data map[string]Value) {
 	defer s.mu.Unlock()
 	s.data = data
 }
-

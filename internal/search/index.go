@@ -135,4 +135,3 @@ func (i *Index) Search(query string, limit int) []Result {
 	}
 	return results
 }
-

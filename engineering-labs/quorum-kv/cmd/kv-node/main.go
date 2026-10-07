@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Manas2006/atlas-research/internal/kv"
+	"github.com/Manas2006/atlas-research/engineering-labs/quorum-kv/internal/kv"
 )
 
 func main() {
