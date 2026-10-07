@@ -114,6 +114,7 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 	}
 	objects, err := video.NewObjectStore(filepath.Join(dataDir, "video", "objects"))
 	if err != nil {
+		queue.Close()
 		impact.Close()
 		metrics.Close()
 		wal.Close()
@@ -133,6 +134,7 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 	if options.Writer != nil {
 		writer, err := collab.NewWriter(*options.Writer)
 		if err != nil {
+			queue.Close()
 			impact.Close()
 			metrics.Close()
 			wal.Close()
@@ -142,6 +144,7 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 	}
 	docs, err := collab.OpenStore(filepath.Join(dataDir, "docs"), collabOptions)
 	if err != nil {
+		queue.Close()
 		impact.Close()
 		metrics.Close()
 		wal.Close()
@@ -196,6 +199,8 @@ func (s *Server) agentSearch(query string, limit int) []collab.Hit {
 func (s *Server) Close() error {
 	// Docs first: each session flushes the edits it has already accepted.
 	_ = s.docs.Close()
+	// Every acknowledged media job change is already durable.
+	_ = s.queue.Close()
 	if err := s.impact.Close(); err != nil {
 		_ = s.metrics.Close()
 		_ = s.wal.Close()

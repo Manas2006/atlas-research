@@ -30,7 +30,8 @@ settings stay on the current device.
 | `docs/.lock` | Held while a process owns the docs, so a second one cannot start on them |
 | `metrics/` | Chronos WAL and immutable metric blocks |
 | `impact/events.wal` | Impact configurations, delivery batches, event IDs, and replay source |
-| `video/jobs.json` | Optional durable media queue and idempotency keys |
+| `video/jobs.json` | Optional durable media queue snapshot and idempotency keys |
+| `video/jobs.json.wal` | Media job changes since that snapshot |
 | `video/objects/` | Optional uploaded objects and HLS outputs |
 
 The Docker setup mounts the same layout at `/data` in a named volume.
