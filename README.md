@@ -49,6 +49,19 @@ The same engine can measure model rollouts, search-ranking tests, product experi
 
 Media transcoding is an optional tool, not a primary Atlas concept. Its resumable upload and lease-based worker remain available through the Compose `media` profile and are documented in [StreamForge](docs/components/media.md).
 
+To synchronize an extracted Google Drive bundle into the knowledge catalog,
+use `atlas-import`. The importer uses stable `gdrive:<file-id>` entry IDs,
+records source provenance and content checksums, and skips unchanged records:
+
+```bash
+go run ./cmd/atlas-import -input /secure/path/drive-bundle.json
+```
+
+Raw Drive exports often contain names, schedules, infrastructure details, or
+credentials. Keep bundles under the ignored `data/` directory (or outside the
+repository) and see [the Drive ingestion runbook](docs/drive-ingestion.md)
+before importing sensitive records.
+
 ## Architecture
 
 ```text

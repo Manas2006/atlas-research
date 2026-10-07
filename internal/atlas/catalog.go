@@ -19,8 +19,22 @@ type Entry struct {
 	Body      string    `json:"body"`
 	Type      string    `json:"type"`
 	Tags      []string  `json:"tags"`
+	Source    *Source   `json:"source,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Source records where an imported entry came from. ContentSHA256 is the
+// checksum of the source text after extraction, which lets importers avoid
+// rewriting unchanged entries without storing connector credentials.
+type Source struct {
+	Provider      string    `json:"provider"`
+	ID            string    `json:"id"`
+	URL           string    `json:"url,omitempty"`
+	Path          string    `json:"path,omitempty"`
+	MIMEType      string    `json:"mime_type,omitempty"`
+	ModifiedAt    time.Time `json:"modified_at,omitempty"`
+	ContentSHA256 string    `json:"content_sha256,omitempty"`
 }
 
 type Run struct {
@@ -110,6 +124,17 @@ func (c *Catalog) SaveEntry(entry Entry) (Entry, error) {
 	}
 	entry.UpdatedAt = now
 	entry.Tags = normalizeTags(entry.Tags)
+	if entry.Source != nil {
+		entry.Source.Provider = strings.TrimSpace(entry.Source.Provider)
+		entry.Source.ID = strings.TrimSpace(entry.Source.ID)
+		entry.Source.URL = strings.TrimSpace(entry.Source.URL)
+		entry.Source.Path = strings.TrimSpace(entry.Source.Path)
+		entry.Source.MIMEType = strings.TrimSpace(entry.Source.MIMEType)
+		entry.Source.ContentSHA256 = strings.ToLower(strings.TrimSpace(entry.Source.ContentSHA256))
+		if entry.Source.Provider == "" || entry.Source.ID == "" {
+			return Entry{}, errors.New("source provider and id are required")
+		}
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

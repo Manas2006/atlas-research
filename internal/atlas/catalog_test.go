@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestCatalogPersistsEntriesAndRuns(t *testing.T) {
@@ -12,7 +13,7 @@ func TestCatalogPersistsEntriesAndRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry, err := catalog.SaveEntry(Entry{Title: "Recovery notes", Body: "Replay the WAL", Type: "Note", Tags: []string{" Search ", "search", "WAL"}})
+	entry, err := catalog.SaveEntry(Entry{Title: "Recovery notes", Body: "Replay the WAL", Type: "Note", Tags: []string{" Search ", "search", "WAL"}, Source: &Source{Provider: " google_drive ", ID: " file-1 ", ModifiedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), ContentSHA256: "ABCDEF"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +33,9 @@ func TestCatalogPersistsEntriesAndRuns(t *testing.T) {
 	if !reflect.DeepEqual(gotEntry.Tags, []string{"search", "wal"}) {
 		t.Fatalf("unexpected normalized tags: %v", gotEntry.Tags)
 	}
+	if gotEntry.Source == nil || gotEntry.Source.Provider != "google_drive" || gotEntry.Source.ID != "file-1" || gotEntry.Source.ContentSHA256 != "abcdef" {
+		t.Fatalf("source provenance was not normalized and recovered: %+v", gotEntry.Source)
+	}
 	if runs := reopened.Runs(); len(runs) != 1 || runs[0].ID != run.ID {
 		t.Fatalf("run was not recovered: %+v", runs)
 	}
@@ -44,6 +48,9 @@ func TestCatalogRejectsMissingNames(t *testing.T) {
 	}
 	if _, err := catalog.SaveEntry(Entry{}); err == nil {
 		t.Fatal("expected missing entry title to fail")
+	}
+	if _, err := catalog.SaveEntry(Entry{Title: "Missing source id", Source: &Source{Provider: "google_drive"}}); err == nil {
+		t.Fatal("expected incomplete provenance to fail")
 	}
 	if _, err := catalog.SaveRun(Run{}); err == nil {
 		t.Fatal("expected missing run name to fail")
