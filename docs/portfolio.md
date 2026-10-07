@@ -22,9 +22,11 @@ protocol. Link the repository and a short architecture note from the resume.
 - Dataset/seed: **N / SEED** synthetic subjects with **C percent** control rate,
   **L percentage-point** known lift, **D percent** duplicate delivery, and an
   injected restart/redelivery at **R percent** of the stream.
-- Measured **E events/second**, **P50 ms** p50 and **P95 ms** p95 processing lag,
-  **W ms** watermark lag, **S bytes/subjects** state size, and **T ms** restart
-  recovery time.
+- Measured **E events/second**, **A50 ms** p50 and **A99 ms** p99 durable
+  acknowledgement latency (fsync included) for **B**-event batches,
+  **S bytes/subjects** state size, and **T ms** restart recovery time.
+  Processing and watermark lag in the synthetic demo describe its simulated
+  delivery delay, not Atlas, so leave them off unless measured on real traffic.
 - Estimated lift was **EL percentage points** (95% CI **LOW to HIGH**), an
   absolute error of **ERR percentage points** from the known synthetic lift;
   uninterrupted and recovered aggregate checksums were **CHECKSUM / CHECKSUM**.

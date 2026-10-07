@@ -29,10 +29,18 @@ consumer count, partition count, and p95 end-to-end lag.
 Use a fixed seed, subject count, control conversion rate, absolute ground-truth
 lift, attribution window, lateness bound, and duplicate percentage. Run five
 trials of both uninterrupted processing and a restart/redelivery at 50 percent.
-Record events processed/second, p50/p95 processing lag, watermark lag, duplicate
-and late-event rates, live subject-state count, WAL size, restart recovery time,
-and absolute difference between estimated and known lift. Verify that both runs
+Record events processed/second, p50/p95/p99 ack latency (`ack_latency_*_ms`)
+with the batch size and storage device, duplicate and late-event rates, live
+subject-state count, WAL size, restart recovery time (`recovery_time_ms`), and
+absolute difference between estimated and known lift. Verify that both runs
 finish with identical sample/conversion aggregates before publishing numbers.
+
+Ack latency and recovery time measure Atlas. Processing lag
+(`processing_lag_*_ms`) and watermark lag (`watermark_lag_ms`) are measured on
+the stream's arrival clock, so with synthetic input they reflect the simulated
+delivery delay, not Atlas; report them only together with that delivery model.
+The exact definitions are in
+[Impact Experiments](components/impact-experiments.md#diagnostics).
 
 ## Video
 

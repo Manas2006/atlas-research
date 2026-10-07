@@ -162,29 +162,34 @@ func (s *Server) runImpactDemo(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "valid JSON body required"})
 		return
 	}
-	events, err := experiments.SyntheticEvents(experiment, config)
+	batches, err := experiments.SyntheticBatches(experiment, config)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	var result experiments.Result
-	for start := 0; start < len(events); start += 500 {
-		end := start + 500
-		if end > len(events) {
-			end = len(events)
-		}
-		_, result, err = s.impact.ProcessBatch(events[start:end])
+	deliveries, recorded := 0, 0
+	for index, batch := range batches {
+		// Synthetic data is dated in the past, so each batch carries its
+		// simulated arrival time; event-time lag is measured on that clock.
+		_, result, err = s.impact.ProcessBatchAt(batch.Events, batch.ArrivedAt)
 		if err != nil {
 			writeImpactError(w, err)
 			return
 		}
-		s.recordImpactMetrics(result)
+		deliveries += len(batch.Events)
+		// Simulated polls are small, so record a Chronos point about every
+		// 500 deliveries instead of after every poll.
+		if deliveries-recorded >= 500 || index == len(batches)-1 {
+			s.recordImpactMetrics(result)
+			recorded = deliveries
+		}
 	}
 	known := config.AbsoluteLift
 	if known == 0 {
 		known = 0.04
 	}
-	summary := experiments.SyntheticSummary{Subjects: int(result.TreatmentSampleSize + result.ControlSampleSize), KnownControlRate: config.ControlRate, KnownAbsoluteLift: known, EstimatedAbsoluteLift: result.AbsoluteLift, AbsoluteEstimationError: math.Abs(result.AbsoluteLift - known), Deliveries: len(events)}
+	summary := experiments.SyntheticSummary{Subjects: int(result.TreatmentSampleSize + result.ControlSampleSize), KnownControlRate: config.ControlRate, KnownAbsoluteLift: known, EstimatedAbsoluteLift: result.AbsoluteLift, AbsoluteEstimationError: math.Abs(result.AbsoluteLift - known), Deliveries: deliveries, Batches: len(batches)}
 	if summary.KnownControlRate == 0 {
 		summary.KnownControlRate = 0.08
 	}

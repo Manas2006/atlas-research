@@ -2,6 +2,7 @@ package experiments
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -22,13 +23,37 @@ type SyntheticSummary struct {
 	EstimatedAbsoluteLift   float64 `json:"estimated_absolute_lift"`
 	AbsoluteEstimationError float64 `json:"absolute_estimation_error"`
 	Deliveries              int     `json:"deliveries"`
+	Batches                 int     `json:"batches"`
 }
 
-// SyntheticEvents produces synthetic advertising observations only. Subject
-// identifiers are generated opaque labels; no user data is read. Delivery is
-// deliberately shuffled and duplicated, conversions are delayed, and click
-// exposures are mixed with impression exposures.
-func SyntheticEvents(experiment Experiment, config SyntheticConfig) ([]Event, error) {
+// SyntheticBatch is one consumer poll of the simulated stream: the events in
+// delivery order and the time the poll returned them, on the stream's own
+// clock. Pass ArrivedAt to Engine.ProcessBatchAt so event-time lag reflects
+// the simulated delivery rather than how long ago the synthetic data is dated.
+type SyntheticBatch struct {
+	ArrivedAt time.Time
+	Events    []Event
+}
+
+// The simulated consumer polls once per second of stream time and takes at
+// most this many records per poll, like a consumer's poll loop with a
+// max-records setting.
+const (
+	syntheticPollInterval = time.Second
+	syntheticMaxBatch     = 500
+)
+
+// SyntheticBatches produces synthetic advertising observations only. Subject
+// identifiers are generated opaque labels; no user data is read. Conversions
+// are delayed, click exposures are mixed with impression exposures, and
+// delivery is duplicated and out of order: every record reaches the consumer
+// after a modeled transport delay (see transportDelay), duplicates are
+// redelivered 1 to 20 seconds after the original, and a consumer polling once
+// per second of stream time returns what has arrived, at most 500 records per
+// poll. Every original record is polled within 54 seconds of its event time
+// and every duplicate within 74 seconds, inside the default two-minute
+// allowed lateness.
+func SyntheticBatches(experiment Experiment, config SyntheticConfig) ([]SyntheticBatch, error) {
 	if config.Subjects == 0 {
 		config.Subjects = 5000
 	}
@@ -59,7 +84,9 @@ func SyntheticEvents(experiment Experiment, config SyntheticConfig) ([]Event, er
 	for index := 0; index < config.Subjects; index++ {
 		subject := fmt.Sprintf("synthetic-%08d", index)
 		arm := assign(experiment, subject)
-		at := start.Add(time.Duration(index%1800) * time.Second)
+		// Millisecond precision keeps measured lags from snapping to whole
+		// seconds of the one-second poll schedule.
+		at := start.Add(time.Duration(index%1800)*time.Second + time.Duration(random.Intn(1000))*time.Millisecond)
 		events = append(events,
 			Event{EventID: fmt.Sprintf("a-%08d", index), ExperimentID: experiment.ID, Type: Assignment, SubjectID: subject, Arm: arm, Timestamp: at, ConfigVersion: experiment.ConfigVersion},
 			Event{EventID: fmt.Sprintf("i-%08d", index), ExperimentID: experiment.ID, Type: Exposure, SubjectID: subject, Arm: arm, Timestamp: at.Add(time.Second), ConfigVersion: experiment.ConfigVersion},
@@ -79,21 +106,66 @@ func SyntheticEvents(experiment Experiment, config SyntheticConfig) ([]Event, er
 		}
 	}
 	base := len(events)
+	var duplicateOf []int
 	for index := 0; index < base; index++ {
 		if random.Float64() < config.DuplicatePct {
-			events = append(events, events[index])
+			duplicateOf = append(duplicateOf, index)
 		}
 	}
-	// Mostly event-time order with bounded local disorder models partitions
-	// arriving at different speeds without turning every early record late.
-	sort.SliceStable(events, func(i, j int) bool { return events[i].Timestamp.Before(events[j].Timestamp) })
-	for start := 0; start < len(events); {
-		end := start + 1
-		for end < len(events) && end-start < 40 && events[end].Timestamp.Sub(events[start].Timestamp) <= 30*time.Second {
+
+	// Each of the 64 logical partitions runs a fixed amount behind the others,
+	// which models partitions arriving at different speeds.
+	partitionSkew := make([]time.Duration, 64)
+	for index := range partitionSkew {
+		partitionSkew[index] = time.Duration(random.Int63n(int64(2 * time.Second)))
+	}
+	arrivals := make([]time.Time, 0, base+len(duplicateOf))
+	for _, event := range events {
+		arrivals = append(arrivals, event.Timestamp.Add(transportDelay(random, partitionSkew[partition(event.SubjectID)])))
+	}
+	for _, index := range duplicateOf {
+		events = append(events, events[index])
+		arrivals = append(arrivals, arrivals[index].Add(time.Second+time.Duration(random.Int63n(int64(19*time.Second)))))
+	}
+
+	order := make([]int, len(events))
+	for index := range order {
+		order[index] = index
+	}
+	sort.SliceStable(order, func(i, j int) bool { return arrivals[order[i]].Before(arrivals[order[j]]) })
+	var batches []SyntheticBatch
+	for first := 0; first < len(order); {
+		// The poll that returns a record is the first poll at or after its
+		// arrival. A poll with more than syntheticMaxBatch records waiting is
+		// followed immediately by another poll at the same stream time.
+		poll := arrivals[order[first]].Truncate(syntheticPollInterval)
+		if poll.Before(arrivals[order[first]]) {
+			poll = poll.Add(syntheticPollInterval)
+		}
+		end := first
+		for end < len(order) && end-first < syntheticMaxBatch && !arrivals[order[end]].After(poll) {
 			end++
 		}
-		random.Shuffle(end-start, func(i, j int) { events[start+i], events[start+j] = events[start+j], events[start+i] })
-		start = end
+		batch := SyntheticBatch{ArrivedAt: poll, Events: make([]Event, 0, end-first)}
+		for _, index := range order[first:end] {
+			batch.Events = append(batch.Events, events[index])
+		}
+		batches = append(batches, batch)
+		first = end
 	}
-	return events, nil
+	return batches, nil
+}
+
+// transportDelay is the simulated time from an event occurring to it reaching
+// the consumer: a 50 ms floor, the partition's skew (0 to 2 s), exponential
+// jitter with a 250 ms mean capped at 5 s, and for 1% of records a straggler
+// delay of 5 to 45 s, as a producer retry would add. The total stays below
+// 53 s.
+func transportDelay(random *rand.Rand, partitionSkew time.Duration) time.Duration {
+	jitter := math.Min(random.ExpFloat64(), 20) * float64(250*time.Millisecond)
+	delay := 50*time.Millisecond + partitionSkew + time.Duration(jitter)
+	if random.Float64() < 0.01 {
+		delay += 5*time.Second + time.Duration(random.Int63n(int64(40*time.Second)))
+	}
+	return delay
 }

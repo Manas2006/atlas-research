@@ -71,20 +71,32 @@ type Event struct {
 	ConfigVersion int       `json:"config_version"`
 }
 
+// Diagnostics mixes two clocks on purpose; docs/components/impact-experiments.md
+// defines every field. Event-time lags (processing_lag_*, watermark_lag_ms) are
+// measured on the stream's arrival clock, which is the wall clock for live
+// ingestion and the caller's arrival time for backfills or simulations, and
+// are rebuilt exactly by WAL replay. Ack latencies are wall-clock durations
+// inside this process and are never produced by replay.
 type Diagnostics struct {
-	Received           int64   `json:"received"`
-	Accepted           int64   `json:"accepted"`
-	Duplicates         int64   `json:"duplicates"`
-	Rejected           int64   `json:"rejected"`
-	Late               int64   `json:"late"`
-	UnmatchedOutcomes  int64   `json:"unmatched_outcomes"`
-	ProcessingLagP50   float64 `json:"processing_lag_p50_ms"`
-	ProcessingLagP95   float64 `json:"processing_lag_p95_ms"`
-	WatermarkLag       float64 `json:"watermark_lag_ms"`
-	StateSubjects      int     `json:"state_subjects"`
-	StateBytesEstimate int64   `json:"state_bytes_estimate"`
-	EventsPerSecond    float64 `json:"events_per_second"`
-	RecoveryTime       float64 `json:"recovery_time_ms"`
+	Received             int64   `json:"received"`
+	Accepted             int64   `json:"accepted"`
+	Duplicates           int64   `json:"duplicates"`
+	Rejected             int64   `json:"rejected"`
+	Late                 int64   `json:"late"`
+	UnmatchedOutcomes    int64   `json:"unmatched_outcomes"`
+	ProcessingLagP50     float64 `json:"processing_lag_p50_ms"`
+	ProcessingLagP95     float64 `json:"processing_lag_p95_ms"`
+	ProcessingLagP99     float64 `json:"processing_lag_p99_ms"`
+	ProcessingLagSamples int     `json:"processing_lag_samples"`
+	WatermarkLag         float64 `json:"watermark_lag_ms"`
+	AckLatencyP50        float64 `json:"ack_latency_p50_ms"`
+	AckLatencyP95        float64 `json:"ack_latency_p95_ms"`
+	AckLatencyP99        float64 `json:"ack_latency_p99_ms"`
+	AckLatencySamples    int     `json:"ack_latency_samples"`
+	StateSubjects        int     `json:"state_subjects"`
+	StateBytesEstimate   int64   `json:"state_bytes_estimate"`
+	EventsPerSecond      float64 `json:"events_per_second"`
+	RecoveryTime         float64 `json:"recovery_time_ms"`
 }
 
 type Result struct {
@@ -157,8 +169,48 @@ type experimentState struct {
 	aggregate    aggregate
 	diagnostics  Diagnostics
 	maxEventTime time.Time
-	lags         []float64
-	history      []Snapshot
+	// latestArrival is the newest arrival time on the stream's clock; the
+	// watermark lag is measured against it rather than against query time.
+	latestArrival time.Time
+	lags          sampleWindow
+	ackLatencies  sampleWindow
+	history       []Snapshot
+}
+
+// latencyWindow bounds memory for percentile diagnostics: each distribution
+// covers the most recent latencyWindow samples.
+const latencyWindow = 2048
+
+// sampleWindow is a fixed-size ring of the most recent millisecond samples.
+type sampleWindow struct {
+	values []float64
+	next   int
+}
+
+func (w *sampleWindow) add(value float64) {
+	if len(w.values) < latencyWindow {
+		w.values = append(w.values, value)
+		return
+	}
+	w.values[w.next] = value
+	w.next = (w.next + 1) % latencyWindow
+}
+
+// percentiles returns nearest-rank p50, p95, and p99 of the window.
+func (w *sampleWindow) percentiles() (p50, p95, p99 float64) {
+	if len(w.values) == 0 {
+		return 0, 0, 0
+	}
+	sorted := append([]float64(nil), w.values...)
+	sort.Float64s(sorted)
+	rank := func(p float64) float64 {
+		index := int(math.Ceil(p/100*float64(len(sorted)))) - 1
+		if index < 0 {
+			index = 0
+		}
+		return sorted[index]
+	}
+	return rank(50), rank(95), rank(99)
 }
 
 type walRecord struct {
@@ -166,6 +218,10 @@ type walRecord struct {
 	Experiment *Experiment `json:"experiment,omitempty"`
 	Event      *Event      `json:"event,omitempty"`
 	Events     []Event     `json:"events,omitempty"`
+	// ArrivedAt is when the Events batch arrived, on the stream's clock.
+	// Replay uses it to rebuild event-time lag exactly as measured; records
+	// written before it existed contribute no lag samples.
+	ArrivedAt *time.Time `json:"arrived_at,omitempty"`
 }
 
 type Engine struct {
@@ -173,7 +229,12 @@ type Engine struct {
 	path   string
 	wal    *os.File
 	states map[string]*experimentState
-	now    func() time.Time
+	// now is the wall clock for configuration timestamps, throughput, and the
+	// arrival time of live deliveries (ProcessBatch).
+	now func() time.Time
+	// latencyClock times acknowledgements. It must keep Go's monotonic clock
+	// reading, so it is time.Now and never time.Now().UTC().
+	latencyClock func() time.Time
 }
 
 func Open(path string) (*Engine, error) {
@@ -185,7 +246,7 @@ func Open(path string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	e := &Engine{path: path, wal: file, states: make(map[string]*experimentState), now: func() time.Time { return time.Now().UTC() }}
+	e := &Engine{path: path, wal: file, states: make(map[string]*experimentState), now: func() time.Time { return time.Now().UTC() }, latencyClock: time.Now}
 	if err := e.replay(); err != nil {
 		file.Close()
 		return nil, err
@@ -346,10 +407,27 @@ func (e *Engine) Process(event Event) (Receipt, Result, error) {
 // ProcessBatch durably records one delivery batch and then applies it. This
 // mirrors a stream consumer's poll transaction: callers commit their source
 // offsets only after this method returns. Retrying an uncertain batch is safe.
+// The batch arrives now on the wall clock, which is right for live ingestion.
 func (e *Engine) ProcessBatch(events []Event) ([]Receipt, Result, error) {
+	return e.ProcessBatchAt(events, time.Time{})
+}
+
+// ProcessBatchAt is ProcessBatch for a delivery whose arrival time comes from
+// the stream's own clock: when the consumer received the batch during a
+// backfill, or the poll time of a simulated delivery schedule. Event-time lag
+// is measured against arrivedAt, so replaying old data does not report the
+// data's age as lag. A zero arrivedAt means the wall clock now.
+func (e *Engine) ProcessBatchAt(events []Event, arrivedAt time.Time) ([]Receipt, Result, error) {
+	// Ack latency starts before the lock so it includes queueing behind other
+	// batches, which a concurrent caller also waits for.
+	started := e.latencyClock()
 	if len(events) == 0 {
 		return nil, Result{}, errors.New("at least one event is required")
 	}
+	if arrivedAt.IsZero() {
+		arrivedAt = e.now()
+	}
+	arrivedAt = arrivedAt.UTC()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	state, ok := e.states[events[0].ExperimentID]
@@ -367,13 +445,17 @@ func (e *Engine) ProcessBatch(events []Event) ([]Receipt, Result, error) {
 	if state.config.Status != Running {
 		return nil, Result{}, fmt.Errorf("experiment is %s", state.config.Status)
 	}
-	if err := e.appendLocked(walRecord{Kind: "events", Events: events}); err != nil {
+	if err := e.appendLocked(walRecord{Kind: "events", Events: events, ArrivedAt: &arrivedAt}); err != nil {
 		return nil, Result{}, err
 	}
 	receipts := make([]Receipt, 0, len(events))
 	for _, event := range events {
-		receipts = append(receipts, e.applyEvent(state, event))
+		receipts = append(receipts, e.applyEvent(state, event, arrivedAt))
 	}
+	// The batch is now fsynced and applied to the results readers see, which
+	// is the commit point the API acknowledges. Building the returned
+	// snapshot and encoding the HTTP response are not included.
+	state.ackLatencies.add(float64(e.latencyClock().Sub(started)) / float64(time.Millisecond))
 	return receipts, resultFor(state, e.now()), nil
 }
 
@@ -390,7 +472,14 @@ func validateEvent(event Event) error {
 	return nil
 }
 
-func (e *Engine) applyEvent(state *experimentState, event Event) Receipt {
+// applyEvent applies one event that arrived at arrivedAt on the stream's clock.
+// Live processing and replay share it, so both derive identical event-time
+// diagnostics from the same durable inputs. A zero arrivedAt (a WAL record
+// written before arrival times were persisted) records no lag sample.
+func (e *Engine) applyEvent(state *experimentState, event Event, arrivedAt time.Time) Receipt {
+	if arrivedAt.After(state.latestArrival) {
+		state.latestArrival = arrivedAt
+	}
 	receipt := Receipt{EventID: event.EventID, Partition: partition(event.SubjectID)}
 	state.diagnostics.Received++
 	if _, duplicate := state.seen[event.EventID]; duplicate {
@@ -415,13 +504,14 @@ func (e *Engine) applyEvent(state *experimentState, event Event) Receipt {
 	if event.Timestamp.After(state.maxEventTime) {
 		state.maxEventTime = event.Timestamp
 	}
-	lag := e.now().Sub(event.Timestamp).Seconds() * 1000
-	if lag < 0 {
-		lag = 0
-	}
-	state.lags = append(state.lags, lag)
-	if len(state.lags) > 2048 {
-		state.lags = append([]float64(nil), state.lags[len(state.lags)-2048:]...)
+	if !arrivedAt.IsZero() {
+		// Event-time lag on the stream's clock. A timestamp ahead of its
+		// arrival (producer clock skew) counts as zero lag.
+		lag := float64(arrivedAt.Sub(event.Timestamp)) / float64(time.Millisecond)
+		if lag < 0 {
+			lag = 0
+		}
+		state.lags.add(lag)
 	}
 	subject := state.subjects[event.SubjectID]
 	if subject == nil {
@@ -595,15 +685,15 @@ func resultFor(state *experimentState, now time.Time) Result {
 			result.Diagnostics.EventsPerSecond = float64(state.diagnostics.Received) / seconds
 		}
 	}
-	if len(state.lags) > 0 {
-		lags := append([]float64(nil), state.lags...)
-		sort.Float64s(lags)
-		result.Diagnostics.ProcessingLagP50 = lags[(len(lags)-1)*50/100]
-		result.Diagnostics.ProcessingLagP95 = lags[(len(lags)-1)*95/100]
-	}
-	if !state.maxEventTime.IsZero() {
+	result.Diagnostics.ProcessingLagP50, result.Diagnostics.ProcessingLagP95, result.Diagnostics.ProcessingLagP99 = state.lags.percentiles()
+	result.Diagnostics.ProcessingLagSamples = len(state.lags.values)
+	result.Diagnostics.AckLatencyP50, result.Diagnostics.AckLatencyP95, result.Diagnostics.AckLatencyP99 = state.ackLatencies.percentiles()
+	result.Diagnostics.AckLatencySamples = len(state.ackLatencies.values)
+	if !state.maxEventTime.IsZero() && !state.latestArrival.IsZero() {
+		// Measured at the latest delivery, not at query time, so an idle stream
+		// or a later read does not inflate it and replay reproduces it.
 		watermark := state.maxEventTime.Add(-time.Duration(state.config.AllowedLatenessSeconds) * time.Second)
-		result.Diagnostics.WatermarkLag = math.Max(0, now.Sub(watermark).Seconds()*1000)
+		result.Diagnostics.WatermarkLag = math.Max(0, float64(state.latestArrival.Sub(watermark))/float64(time.Millisecond))
 	}
 	return result
 }
@@ -682,14 +772,22 @@ func (e *Engine) replay() error {
 			if state == nil {
 				return errors.New("impact WAL event precedes experiment")
 			}
-			e.applyEvent(state, *record.Event)
+			// Legacy single-event records have no arrival time, so they add no
+			// lag sample rather than one measured against replay time.
+			e.applyEvent(state, *record.Event, time.Time{})
 		case record.Kind == "events" && len(record.Events) > 0:
+			// Replay rebuilds event-time lag from the persisted arrival time and
+			// never records ack latency, so neither depends on replay speed.
+			var arrivedAt time.Time
+			if record.ArrivedAt != nil {
+				arrivedAt = *record.ArrivedAt
+			}
 			for _, event := range record.Events {
 				state := e.states[event.ExperimentID]
 				if state == nil {
 					return errors.New("impact WAL event precedes experiment")
 				}
-				e.applyEvent(state, event)
+				e.applyEvent(state, event, arrivedAt)
 			}
 		default:
 			return errors.New("invalid impact WAL record")

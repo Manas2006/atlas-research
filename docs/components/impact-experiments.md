@@ -32,6 +32,34 @@ For an external broker, partition by pseudonymous subject ID and commit source o
 
 This contract is **durable idempotent processing**, not a claim of end-to-end exactly-once delivery. Atlas cannot atomically commit offsets in an arbitrary external broker. A producer that changes event IDs on retry can double-deliver, and a producer that commits its offset before Atlas acknowledges can lose data. WAL fsync and Chronos metric writes are separate: the WAL/result is authoritative, and a crash can omit a non-authoritative convergence point from Chronos without changing the final experiment result.
 
+## Diagnostics
+
+Diagnostics use two clocks, and the difference matters when quoting them.
+
+- The **stream clock** is when a delivery batch arrived. For live HTTP ingestion it is the server's wall clock when the engine receives the batch. For a backfill or simulation, the caller passes the arrival time with `ProcessBatchAt` (a broker timestamp, or the simulated poll time in the demo), so historical data is not reported as months of lag. Each WAL batch record stores this time as `arrived_at`.
+- **Wall-clock durations** are measured with Go's monotonic clock inside the running process.
+
+| Field | Clock | Definition |
+| --- | --- | --- |
+| `received` | n/a | Events delivered, including duplicates, rejected, and late events. |
+| `accepted` | n/a | Events that changed state: not duplicate, rejected, or late. |
+| `duplicates` | n/a | Deliveries whose event ID was already seen. |
+| `rejected` | n/a | Events with a wrong configuration version, arm, or outcome name. |
+| `late` | n/a | Unseen events older than the watermark at arrival; they do not change results. |
+| `unmatched_outcomes` | n/a | Outcomes for subjects with no exposure yet, plus those that expired without one. |
+| `processing_lag_p50_ms`, `processing_lag_p95_ms`, `processing_lag_p99_ms` | stream | Event-time lag of accepted events: the batch's arrival time minus the event's `event_timestamp`, clamped at zero for producer clock skew. Nearest-rank percentiles over the most recent 2,048 accepted events. |
+| `processing_lag_samples` | stream | Number of samples behind the processing-lag percentiles (at most 2,048). |
+| `watermark_lag_ms` | stream | The latest arrival time minus the watermark (greatest accepted event time minus allowed lateness). It is evaluated at the latest delivery, not when results are read, so an idle stream does not inflate it. It equals the allowed lateness plus how far the greatest event time trails the latest arrival, so it is at least the allowed lateness unless producer clocks run ahead of the arrival clock. |
+| `ack_latency_p50_ms`, `ack_latency_p95_ms`, `ack_latency_p99_ms` | wall | Per delivery batch: from the moment `ProcessBatch` is called (so time spent waiting for the engine lock is included) until the batch's WAL record is written and fsynced and the in-memory aggregates include it. That is the commit point the API acknowledges. It excludes building the returned result, JSON encoding, and HTTP transport. Only successfully acknowledged batches count. Nearest-rank percentiles over the most recent 2,048 batches. |
+| `ack_latency_samples` | wall | Number of batches behind the ack-latency percentiles (at most 2,048). |
+| `events_per_second` | wall | `received` divided by the wall-clock seconds since the experiment started: an average rate over the experiment's life (replayed events included after a restart), not peak throughput. |
+| `recovery_time_ms` | wall | Time this process spent opening the WAL and replaying it. |
+| `state_subjects`, `state_bytes_estimate` | n/a | Live subject join state and a rough size estimate of it plus the event-ID index. |
+
+Replay rebuilds the stream-clock diagnostics exactly, because it applies each batch with its persisted `arrived_at`. It never adds ack-latency samples, so how fast replay runs cannot affect those percentiles. Ack latency is process-local: it is not persisted and starts empty after a restart. WAL records written before `arrived_at` existed replay without lag samples rather than with lag measured at replay time.
+
+Ack latency depends on batch size and on the disk's fsync latency, so quote it with both. Processing and watermark lag describe how the input arrived. In the synthetic demo they measure the simulated delivery model below, not Atlas.
+
 ## API
 
 | Method | Path | Purpose |
@@ -49,3 +77,5 @@ The assignment response includes a 64-way logical subject partition. It makes th
 ## Synthetic advertising demo
 
 `make impact-demo` creates a treatment/control population with a configured known absolute lift, emits impression exposures, click-like repeat exposures, delayed numeric conversion outcomes, bounded out-of-order delivery, and duplicates. Midstream it closes and reopens the WAL, redelivers the last uncertain batch to model a rebalance/crash before offset commit, and fails unless the sample count, deduplication, recovery, and lift estimate are within the documented tolerance.
+
+The synthetic events are dated from 2026-01-01, so the demo runs on a simulated stream clock. Each record reaches the consumer after a modeled transport delay: a 50 ms floor, a fixed skew of 0 to 2 s for each of the 64 subject partitions, exponential jitter with a 250 ms mean (capped at 5 s), and, for 1% of records, an extra 5 to 45 s straggler delay. Duplicates are redelivered 1 to 20 s after the original. A consumer polls once per second of stream time and takes at most 500 records per poll, and each poll is one `ProcessBatchAt` call with the poll time as its arrival time. Every record is therefore processed within about 74 s of its event time, inside the default two-minute allowed lateness, so the demo reports no late events. The simulated restart takes no stream time; its real cost is `recovery_time_ms`.

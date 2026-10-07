@@ -39,19 +39,27 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	events, err := experiments.SyntheticEvents(experiment, experiments.SyntheticConfig{Subjects: *subjects, ControlRate: *controlRate, AbsoluteLift: *lift, DuplicatePct: 0.05, Seed: 20261007})
+	batches, err := experiments.SyntheticBatches(experiment, experiments.SyntheticConfig{Subjects: *subjects, ControlRate: *controlRate, AbsoluteLift: *lift, DuplicatePct: 0.05, Seed: 20261007})
 	if err != nil {
 		fatal(err)
 	}
+	deliveries := 0
+	for _, batch := range batches {
+		deliveries += len(batch.Events)
+	}
 
-	middle := len(events) / 2
+	// Each batch is handed to the engine at its simulated arrival time, so
+	// event-time lag reflects the modeled transport delay and disorder rather
+	// than the age of the synthetic timestamps. Ack latency is wall-clock time.
+	// Restart at the batch boundary where half of the deliveries are done.
+	middle, delivered := 0, 0
+	for middle < len(batches) && delivered < deliveries/2 {
+		delivered += len(batches[middle].Events)
+		middle++
+	}
 	process := func(from, to int) {
-		for start := from; start < to; start += 500 {
-			end := start + 500
-			if end > to {
-				end = to
-			}
-			if _, _, err := engine.ProcessBatch(events[start:end]); err != nil {
+		for _, batch := range batches[from:to] {
+			if _, _, err := engine.ProcessBatchAt(batch.Events, batch.ArrivedAt); err != nil {
 				fatal(err)
 			}
 		}
@@ -59,6 +67,8 @@ func main() {
 	process(0, middle)
 	// Simulate a process crash/rebalance after durable processing but before
 	// the source offset is committed. Reopen, then redeliver the last batch.
+	// The simulated restart takes no stream time; its real cost is reported
+	// as recovery_time_ms.
 	if err := engine.Close(); err != nil {
 		fatal(err)
 	}
@@ -66,12 +76,12 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	retryStart := middle - 500
+	retryStart := middle - 1
 	if retryStart < 0 {
 		retryStart = 0
 	}
 	process(retryStart, middle)
-	process(middle, len(events))
+	process(middle, len(batches))
 	_, result, ok := engine.Get(experiment.ID)
 	if !ok {
 		fatal(fmt.Errorf("experiment missing after restart"))
@@ -84,7 +94,8 @@ func main() {
 	output := map[string]any{
 		"synthetic_data": true, "subjects": *subjects, "known_absolute_lift": *lift,
 		"estimated_absolute_lift": result.AbsoluteLift, "absolute_error": math.Abs(result.AbsoluteLift - *lift),
-		"duplicates_absorbed": result.Diagnostics.Duplicates, "convergence_points": historyPoints, "result": result,
+		"duplicates_absorbed": result.Diagnostics.Duplicates, "convergence_points": historyPoints,
+		"deliveries": deliveries, "delivery_batches": len(batches), "allowed_lateness_seconds": experiment.AllowedLatenessSeconds, "result": result,
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
 		fatal(err)
