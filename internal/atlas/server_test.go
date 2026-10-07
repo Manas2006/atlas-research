@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/Manas2006/atlas-research/internal/collab"
@@ -40,6 +42,70 @@ func TestServerIndexesAndSearchesEntries(t *testing.T) {
 	}
 	if len(body.Results) != 1 || body.Results[0].Entry.Title != "Lease recovery" {
 		t.Fatalf("unexpected search results: %+v", body.Results)
+	}
+}
+
+func TestConsoleReadsMeasuredTrafficAndPersistedMediaJobs(t *testing.T) {
+	server, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	handler := server.Handler()
+	request := func(method, path, body string, headers map[string]string) *httptest.ResponseRecorder {
+		t.Helper()
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		for key, value := range headers {
+			r.Header.Set(key, value)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, r)
+		return response
+	}
+
+	empty := request(http.MethodGet, "/api/video/v1/jobs", "", nil)
+	if empty.Code != http.StatusOK || !strings.Contains(empty.Body.String(), `"jobs":[]`) {
+		t.Fatalf("expected an empty real queue: %d %s", empty.Code, empty.Body.String())
+	}
+	created := request(http.MethodPost, "/api/video/v1/uploads", "", nil)
+	var upload struct {
+		UploadID string `json:"upload_id"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &upload); err != nil || upload.UploadID == "" {
+		t.Fatalf("create upload: %d %s", created.Code, created.Body.String())
+	}
+	path := "/api/video/v1/uploads/" + upload.UploadID
+	chunk := request(http.MethodPatch, path, "real video bytes", map[string]string{"Upload-Offset": "0"})
+	if chunk.Code != http.StatusNoContent {
+		t.Fatalf("upload chunk: %d %s", chunk.Code, chunk.Body.String())
+	}
+	completed := request(http.MethodPost, path+"/complete", "", map[string]string{"X-Upload-Name": url.QueryEscape("research clip.mp4")})
+	if completed.Code != http.StatusAccepted {
+		t.Fatalf("complete upload: %d %s", completed.Code, completed.Body.String())
+	}
+	jobs := request(http.MethodGet, "/api/video/v1/jobs", "", nil)
+	var listed struct {
+		Jobs []struct {
+			Name      string `json:"name"`
+			SizeBytes int64  `json:"size_bytes"`
+			State     string `json:"state"`
+		} `json:"jobs"`
+	}
+	if err := json.Unmarshal(jobs.Body.Bytes(), &listed); err != nil || len(listed.Jobs) != 1 || listed.Jobs[0].Name != "research clip.mp4" || listed.Jobs[0].SizeBytes != 16 || listed.Jobs[0].State != "queued" {
+		t.Fatalf("real job not listed: %d %s", jobs.Code, jobs.Body.String())
+	}
+	if strings.Contains(jobs.Body.String(), "input_path") || strings.Contains(jobs.Body.String(), "idempotency_key") {
+		t.Fatalf("job list exposed internal paths or keys: %s", jobs.Body.String())
+	}
+	signals := request(http.MethodGet, "/api/signals", "", nil)
+	var measured struct {
+		Requests uint64 `json:"requests"`
+		History  []struct {
+			Count uint64 `json:"count"`
+		} `json:"request_history"`
+	}
+	if err := json.Unmarshal(signals.Body.Bytes(), &measured); err != nil || measured.Requests < 6 || len(measured.History) != 12 || measured.History[11].Count < 6 {
+		t.Fatalf("traffic was not measured: %d %s", signals.Code, signals.Body.String())
 	}
 }
 

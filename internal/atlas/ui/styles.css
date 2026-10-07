@@ -218,7 +218,7 @@ kbd { font-size: 10px; padding: 2px 6px; border: 1px solid var(--rule); border-r
 .signal-grid { align-items: start; }
 .live-badge { display: flex; align-items: center; gap: 7px; color: var(--ok) !important; }
 .live-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
-.signal-row { display: grid; grid-template-columns: 150px 1fr 90px; gap: 16px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--rule); }
+.signal-row { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--rule); }
 .signal-row:last-child, .event-row:last-child, .media-job:last-child { border: 0; }
 .signal-row > div { height: 2px; background: var(--rule); overflow: hidden; }
 .signal-row > div i { display: block; height: 100%; background: var(--ink); }

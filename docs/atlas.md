@@ -4,13 +4,15 @@
 
 The console has two useful modes:
 
-1. **Browser mode** keeps knowledge entries, experiment records, and simulated
-   media jobs in local storage. It works directly from GitHub Pages without an
-   account or backend. Live docs are unavailable in this mode because there is
-   nothing to share them through.
+1. **Browser mode** keeps knowledge entries and experiment records created by
+   the user in local storage. It works directly from GitHub Pages without an
+   account or backend. Runtime signals, media jobs, and live docs require a
+   connected Atlas service. Empty screens display no invented records.
 2. **Connected mode** sends records to the Go runtime. Entries are durably
-   stored, appended to the search WAL, and indexed with BM25. Signals come from
-   the running process, metrics use Chronos, and media uploads use StreamForge.
+   stored, appended to the search WAL, and indexed with BM25. Signals and the
+   last 12 minutes of request counts come from the running process; the history
+   resets when it restarts. Metrics use Chronos, and media jobs are read from
+   the persisted StreamForge queue.
 
 Use the Runtime control under the navigation to change modes. Connection
 settings stay on the current device.
@@ -49,6 +51,7 @@ The Docker setup mounts the same layout at `/data` in a named volume.
 | `GET` | `/api/agents` | Agents this runtime offers |
 | `GET` | `/api/signals` | Measured process and search signals |
 | any | `/api/metrics/*` | Chronos time-series API |
+| `GET` | `/api/video/v1/jobs` | Persisted media jobs |
 | any | `/api/video/*` | StreamForge upload and queue API |
 
 Example:

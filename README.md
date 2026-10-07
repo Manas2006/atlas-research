@@ -12,9 +12,10 @@ extend while preserving the important storage and failure semantics.
 **[Open the interactive console](https://manas2006.github.io/atlas-research/)**
 or use the [hosted console](https://atlas-research-console.manasp123.chatgpt.site).
 
-The public interface starts in private browser mode, so entries stay on the
-current device. Connect it to a locally running Atlas service for durable files,
-real BM25 search, runtime measurements, resumable uploads, and media jobs.
+The public interface starts in private browser mode. Only records you create
+on that device appear there; runtime charts and media jobs stay empty until
+you connect an Atlas service. Connect a locally running service for durable
+files, BM25 search, runtime measurements, resumable uploads, and media jobs.
 
 ## What Atlas is useful for
 

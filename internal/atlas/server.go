@@ -39,10 +39,18 @@ type Server struct {
 	wal         *search.WAL
 	metrics     *tsdb.Store
 	video       http.Handler
+	queue       *video.Queue
 	started     time.Time
 	requests    atomic.Uint64
 	searchMu    sync.Mutex
 	searchTimes []time.Duration
+	trafficMu   sync.Mutex
+	traffic     [12]requestBucket
+}
+
+type requestBucket struct {
+	Minute int64  `json:"minute"`
+	Count  uint64 `json:"count"`
 }
 
 type SearchResult struct {
@@ -101,7 +109,7 @@ func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 		wal.Close()
 		return nil, err
 	}
-	server := &Server{catalog: catalog, index: index, wal: wal, metrics: metrics, video: (&video.API{Queue: queue, Store: objects}).Handler(), started: time.Now().UTC()}
+	server := &Server{catalog: catalog, index: index, wal: wal, metrics: metrics, queue: queue, video: (&video.API{Queue: queue, Store: objects}).Handler(), started: time.Now().UTC()}
 	for _, origin := range options.AllowedOrigins {
 		if origin = strings.TrimRight(strings.TrimSpace(origin), "/"); origin != "" {
 			server.origins = append(server.origins, origin)
@@ -206,7 +214,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	entries, runs := s.catalog.Counts()
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mode": "connected", "uptime_seconds": int64(time.Since(s.started).Seconds()), "documents": s.index.Len(), "entries": entries, "runs": runs, "docs": s.docs.Count(), "metric_series": s.metrics.SeriesCount()})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mode": "connected", "uptime_seconds": int64(time.Since(s.started).Seconds()), "documents": s.index.Len(), "entries": entries, "runs": runs, "docs": s.docs.Count(), "metric_series": s.metrics.SeriesCount(), "media_jobs": len(s.queue.List())})
 }
 
 func (s *Server) entries(w http.ResponseWriter, r *http.Request) {
@@ -305,12 +313,32 @@ func (s *Server) signals(w http.ResponseWriter, _ *http.Request) {
 	if len(times) > 0 {
 		p95 = times[(len(times)-1)*95/100]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"requests": s.requests.Load(), "goroutines": runtime.NumGoroutine(), "heap_bytes": memory.HeapAlloc, "search_p95_microseconds": p95.Microseconds(), "search_samples": len(times), "metric_series": s.metrics.SeriesCount(), "uptime_seconds": int64(time.Since(s.started).Seconds())})
+	minute := time.Now().Unix() / 60
+	history := make([]requestBucket, 0, len(s.traffic))
+	s.trafficMu.Lock()
+	for offset := int64(len(s.traffic) - 1); offset >= 0; offset-- {
+		current := minute - offset
+		bucket := s.traffic[current%int64(len(s.traffic))]
+		if bucket.Minute != current {
+			bucket = requestBucket{Minute: current}
+		}
+		history = append(history, bucket)
+	}
+	s.trafficMu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"requests": s.requests.Load(), "request_history": history, "goroutines": runtime.NumGoroutine(), "heap_bytes": memory.HeapAlloc, "search_p95_microseconds": p95.Microseconds(), "search_samples": len(times), "metric_series": s.metrics.SeriesCount(), "uptime_seconds": int64(time.Since(s.started).Seconds())})
 }
 
 func (s *Server) observe(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.requests.Add(1)
+		minute := time.Now().Unix() / 60
+		s.trafficMu.Lock()
+		bucket := &s.traffic[minute%int64(len(s.traffic))]
+		if bucket.Minute != minute {
+			*bucket = requestBucket{Minute: minute}
+		}
+		bucket.Count++
+		s.trafficMu.Unlock()
 		next.ServeHTTP(w, r)
 	})
 }
@@ -327,7 +355,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, Upload-Offset, Access-Control-Request-Private-Network")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, Upload-Offset, X-Upload-Name, Access-Control-Request-Private-Network")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Private-Network", "true")
 		}
