@@ -103,7 +103,7 @@ make analytics-demo       # requires Docker; runs until stopped
 make video-demo           # requires FFmpeg
 ```
 
-Do not publish invented performance claims. Follow the [benchmarking protocol](docs/benchmarking.md), record the hardware, data size, commit, and command, and fill in [the portfolio result template](docs/portfolio.md) only after reproducing a measurement.
+Do not publish invented performance claims. Follow the [benchmarking protocol](docs/benchmarking.md), record the hardware, data size, commit, and command, and fill in [the portfolio result template](docs/portfolio.md) only after reproducing a measurement. Current measured results, with hardware and commands, are in [docs/results.md](docs/results.md).
 
 ## Security and deployment limitations
 
