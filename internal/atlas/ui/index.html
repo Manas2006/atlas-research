@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0a0a0d">
-  <meta name="description" content="Search technical knowledge, track experiments, inspect system signals, and process research media.">
+  <meta name="description" content="Search technical knowledge, track experiments, write live docs with your lab and its agents, inspect system signals, and process research media.">
   <title>Atlas Research Console</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
@@ -20,6 +20,7 @@
         <button class="nav-item" data-view="experiments"><span class="nav-icon">◇</span><span>Experiments</span><kbd>3</kbd></button>
         <button class="nav-item" data-view="signals"><span class="nav-icon">⌁</span><span>Signals</span><kbd>4</kbd></button>
         <button class="nav-item" data-view="media"><span class="nav-icon">▷</span><span>Media jobs</span><kbd>5</kbd></button>
+        <button class="nav-item" data-view="docs"><span class="nav-icon">✎</span><span>Live docs</span><kbd>6</kbd></button>
       </nav>
       <div class="sidebar-foot">
         <p class="nav-label">Runtime</p>
@@ -37,6 +38,9 @@
   </div>
   <div id="modalRoot"></div>
   <div id="toast" class="toast" role="status"></div>
+  <script src="ot.js" defer></script>
+  <script src="collab.js" defer></script>
+  <script src="docs.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
