@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package atlas.search.v1;
 
-option go_package = "github.com/Manas2006/distributed-systems-portfolio/gen/search/v1;searchv1";
+option go_package = "github.com/Manas2006/atlas-research/gen/search/v1;searchv1";
 
 service SearchService {
   rpc Upsert(UpsertRequest) returns (UpsertResponse);

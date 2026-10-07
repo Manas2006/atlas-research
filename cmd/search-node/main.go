@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/search"
+	"github.com/Manas2006/atlas-research/internal/search"
 )
 
 func main() {

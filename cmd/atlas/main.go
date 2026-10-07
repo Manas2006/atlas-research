@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/atlas"
-	"github.com/Manas2006/distributed-systems-portfolio/internal/collab"
+	"github.com/Manas2006/atlas-research/internal/atlas"
+	"github.com/Manas2006/atlas-research/internal/collab"
 )
 
 func main() {

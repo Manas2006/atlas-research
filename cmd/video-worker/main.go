@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/video"
+	"github.com/Manas2006/atlas-research/internal/video"
 )
 
 func main() {
@@ -19,5 +19,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	worker := video.Worker{ID: *id, Queue: video.NewQueueClient(*api), Transcoder: video.Transcoder{FFmpeg: *ffmpeg}}
-	if err := worker.Run(ctx); err != nil && err != context.Canceled { log.Fatal(err) }
+	if err := worker.Run(ctx); err != nil && err != context.Canceled {
+		log.Fatal(err)
+	}
 }

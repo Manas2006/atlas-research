@@ -1,3 +1,3 @@
-module github.com/Manas2006/distributed-systems-portfolio
+module github.com/Manas2006/atlas-research
 
 go 1.23

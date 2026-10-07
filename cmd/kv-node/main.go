@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/kv"
+	"github.com/Manas2006/atlas-research/internal/kv"
 )
 
 func main() {
@@ -18,13 +18,21 @@ func main() {
 	urls := make(map[string]string)
 	for _, member := range strings.Split(*cluster, ",") {
 		parts := strings.SplitN(member, "=", 2)
-		if len(parts) != 2 { log.Fatalf("invalid cluster member %q", member) }
+		if len(parts) != 2 {
+			log.Fatalf("invalid cluster member %q", member)
+		}
 		urls[parts[0]] = parts[1]
 	}
 	var peers []string
-	for member := range urls { if member != *id { peers = append(peers, member) } }
+	for member := range urls {
+		if member != *id {
+			peers = append(peers, member)
+		}
+	}
 	node, err := kv.NewNode(*id, peers, kv.NewHTTPTransport(urls), *dataDir)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	node.Start()
 	defer node.Stop()
 	log.Printf("kv node %s listening on %s", *id, *address)

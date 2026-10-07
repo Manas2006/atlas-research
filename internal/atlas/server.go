@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/collab"
-	"github.com/Manas2006/distributed-systems-portfolio/internal/search"
-	"github.com/Manas2006/distributed-systems-portfolio/internal/tsdb"
-	"github.com/Manas2006/distributed-systems-portfolio/internal/video"
+	"github.com/Manas2006/atlas-research/internal/collab"
+	"github.com/Manas2006/atlas-research/internal/search"
+	"github.com/Manas2006/atlas-research/internal/tsdb"
+	"github.com/Manas2006/atlas-research/internal/video"
 )
 
 //go:embed ui/*

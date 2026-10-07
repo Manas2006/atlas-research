@@ -1,7 +1,7 @@
 # Atlas Research Console
 
-[![CI](https://github.com/Manas2006/distributed-systems-portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/Manas2006/distributed-systems-portfolio/actions/workflows/ci.yml)
-[![Deploy console](https://github.com/Manas2006/distributed-systems-portfolio/actions/workflows/pages.yml/badge.svg)](https://github.com/Manas2006/distributed-systems-portfolio/actions/workflows/pages.yml)
+[![CI](https://github.com/Manas2006/atlas-research/actions/workflows/ci.yml/badge.svg)](https://github.com/Manas2006/atlas-research/actions/workflows/ci.yml)
+[![Deploy console](https://github.com/Manas2006/atlas-research/actions/workflows/pages.yml/badge.svg)](https://github.com/Manas2006/atlas-research/actions/workflows/pages.yml)
 
 Atlas is a self-hosted research operations workspace backed by a set of focused
 distributed systems. It gives you one place to search papers and technical
@@ -9,7 +9,7 @@ notes, register experiments, inspect live runtime signals, and prepare research
 demo videos. The implementations stay small enough to understand, test, and
 extend while preserving the important storage and failure semantics.
 
-**[Open the interactive console](https://manas2006.github.io/distributed-systems-portfolio/)**
+**[Open the interactive console](https://manas2006.github.io/atlas-research/)**
 or use the [hosted console](https://atlas-research-console.manasp123.chatgpt.site).
 
 The public interface starts in private browser mode, so entries stay on the

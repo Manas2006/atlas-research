@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/collab"
+	"github.com/Manas2006/atlas-research/internal/collab"
 )
 
 func TestServerIndexesAndSearchesEntries(t *testing.T) {

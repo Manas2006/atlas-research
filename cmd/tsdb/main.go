@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/Manas2006/distributed-systems-portfolio/internal/tsdb"
+	"github.com/Manas2006/atlas-research/internal/tsdb"
 )
 
 func main() {
@@ -14,9 +14,10 @@ func main() {
 	blockSize := flag.Int("block-size", 4096, "samples per immutable block")
 	flag.Parse()
 	store, err := tsdb.OpenStore(*dataDir, *blockSize)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer store.Close()
 	log.Printf("time-series database listening on %s", *address)
 	log.Fatal(http.ListenAndServe(*address, (&tsdb.API{Store: store}).Handler()))
 }
-
