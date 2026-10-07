@@ -64,13 +64,29 @@ type ReplicaSet struct {
 	Replicas []string
 }
 
+// DefaultHedgeDelay is how long a search waits on one replica of a shard
+// before also asking the next replica.
+const DefaultHedgeDelay = 50 * time.Millisecond
+
 type Coordinator struct {
 	Shards []ReplicaSet
 	Client *http.Client
+	// HedgeDelay bounds how long a search waits for a successful response
+	// from a shard replica before it also queries the next replica. Zero
+	// means DefaultHedgeDelay. A negative value disables hedging, so the next
+	// replica is only queried after the current one fails.
+	HedgeDelay time.Duration
 }
 
 func NewCoordinator(shards []ReplicaSet) *Coordinator {
-	return &Coordinator{Shards: shards, Client: &http.Client{Timeout: 2 * time.Second}}
+	return &Coordinator{Shards: shards, Client: &http.Client{Timeout: 2 * time.Second}, HedgeDelay: DefaultHedgeDelay}
+}
+
+func (c *Coordinator) hedgeDelay() time.Duration {
+	if c.HedgeDelay == 0 {
+		return DefaultHedgeDelay
+	}
+	return c.HedgeDelay
 }
 
 // ShardFor applies rendezvous hashing, which minimizes movement when shards
@@ -157,28 +173,12 @@ func (c *Coordinator) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2500*time.Millisecond)
 	defer cancel()
+	path := "/v1/search?q=" + url.QueryEscape(r.URL.Query().Get("q")) + "&limit=" + strconv.Itoa(limit)
 	responses := make(chan shardResult, len(c.Shards))
 	for _, shard := range c.Shards {
 		go func(set ReplicaSet) {
-			var lastErr error
-			for _, replica := range set.Replicas {
-				requestURL := strings.TrimRight(replica, "/") + "/v1/search?q=" + url.QueryEscape(r.URL.Query().Get("q")) + "&limit=" + strconv.Itoa(limit)
-				req, _ := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
-				response, err := c.Client.Do(req)
-				if err != nil {
-					lastErr = err
-					continue
-				}
-				var body QueryResponse
-				err = json.NewDecoder(response.Body).Decode(&body)
-				response.Body.Close()
-				if err == nil && response.StatusCode/100 == 2 {
-					responses <- shardResult{results: body.Results}
-					return
-				}
-				lastErr = err
-			}
-			responses <- shardResult{err: lastErr}
+			results, err := c.searchShard(ctx, set, path)
+			responses <- shardResult{results: results, err: err}
 		}(shard)
 	}
 
@@ -201,6 +201,108 @@ func (c *Coordinator) handleSearch(w http.ResponseWriter, r *http.Request) {
 		all = all[:limit]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": all, "failed_shards": failed})
+}
+
+// searchShard sends a search to one replica set with hedging. It queries the
+// first replica, and each time the hedge delay passes without a successful
+// response it also queries the next replica. A replica that fails is replaced
+// by the next one at once, without waiting for the delay. The first successful
+// response wins and the requests still in flight are cancelled. If every
+// replica fails, the last error is returned.
+func (c *Coordinator) searchShard(ctx context.Context, set ReplicaSet, path string) ([]Result, error) {
+	if len(set.Replicas) == 0 {
+		return nil, fmt.Errorf("shard %s has no replicas", set.Name)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type attempt struct {
+		results []Result
+		err     error
+	}
+	// Buffered so a losing request can always report and exit after the
+	// winner has returned.
+	attempts := make(chan attempt, len(set.Replicas))
+	next, pending := 0, 0
+	launch := func() {
+		replica := set.Replicas[next]
+		next++
+		pending++
+		go func() {
+			results, err := c.searchReplica(ctx, replica, path)
+			attempts <- attempt{results: results, err: err}
+		}()
+	}
+
+	// A fresh timer per hedge keeps a stale tick from an earlier timer from
+	// firing a hedge early.
+	delay := c.hedgeDelay()
+	var timer *time.Timer
+	var hedge <-chan time.Time // nil, so never ready, while no hedge is due
+	schedule := func() {
+		if timer != nil {
+			timer.Stop()
+		}
+		hedge = nil
+		if delay >= 0 && next < len(set.Replicas) {
+			timer = time.NewTimer(delay)
+			hedge = timer.C
+		}
+	}
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	launch()
+	schedule()
+	var lastErr error
+	for pending > 0 {
+		select {
+		case outcome := <-attempts:
+			pending--
+			if outcome.err == nil {
+				return outcome.results, nil
+			}
+			lastErr = outcome.err
+			if next < len(set.Replicas) {
+				launch()
+				schedule()
+			}
+		case <-hedge:
+			launch()
+			schedule()
+		case <-ctx.Done():
+			// The query deadline passed or the client went away. The
+			// requests in flight share ctx, so they are already cancelled.
+			if lastErr == nil {
+				lastErr = ctx.Err()
+			}
+			return nil, lastErr
+		}
+	}
+	return nil, lastErr
+}
+
+func (c *Coordinator) searchReplica(ctx context.Context, replica, path string) ([]Result, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(replica, "/")+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("replica %s returned %s", replica, response.Status)
+	}
+	var body QueryResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("replica %s: decode search response: %w", replica, err)
+	}
+	return body.Results, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

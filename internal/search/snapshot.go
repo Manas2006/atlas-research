@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 )
 
@@ -20,45 +21,49 @@ type diskSnapshot struct {
 
 // WriteSnapshot writes a gzip-compressed term dictionary. Each posting list is
 // independently encoded using delta document ordinals and unsigned varints.
+// Ordinals follow ascending document ID order, so the format does not depend
+// on internal slot numbers and is unchanged from the map-based index.
 func (i *Index) WriteSnapshot(destination io.Writer) error {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	ids := make([]string, 0, len(i.docs))
-	for id := range i.docs {
+	ids := make([]string, 0, len(i.slots))
+	for id := range i.slots {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	ordinals := make(map[string]int, len(ids))
+	ordinals := make([]uint32, len(i.docs)) // by slot; unset for tombstones
 	snapshot := diskSnapshot{
 		Version:  snapshotVersion,
 		Docs:     make([]Document, len(ids)),
 		Lengths:  make([]int, len(ids)),
-		Postings: make(map[string][]byte, len(i.postings)),
+		Postings: make(map[string][]byte, len(i.terms)),
 	}
 	for ordinal, id := range ids {
-		ordinals[id] = ordinal
-		snapshot.Docs[ordinal] = i.docs[id]
-		snapshot.Lengths[ordinal] = i.lengths[id]
+		slot := i.slots[id]
+		ordinals[slot] = uint32(ordinal)
+		snapshot.Docs[ordinal] = i.docs[slot]
+		snapshot.Lengths[ordinal] = int(i.lengths[slot])
 	}
 
 	var scratch [binary.MaxVarintLen64]byte
-	for term, posting := range i.postings {
-		postingIDs := make([]string, 0, len(posting))
-		for id := range posting {
-			postingIDs = append(postingIDs, id)
+	var live []posting
+	for term, entry := range i.terms {
+		live = live[:0]
+		for _, p := range entry.postings {
+			if i.live[p.doc] {
+				live = append(live, posting{doc: ordinals[p.doc], tf: p.tf})
+			}
 		}
-		sort.Slice(postingIDs, func(a, b int) bool {
-			return ordinals[postingIDs[a]] < ordinals[postingIDs[b]]
-		})
-		encoded := make([]byte, 0, len(postingIDs)*2)
+		sort.Slice(live, func(a, b int) bool { return live[a].doc < live[b].doc })
+		encoded := make([]byte, 0, len(live)*2)
 		previous := -1
-		for _, id := range postingIDs {
-			ordinal := ordinals[id]
+		for _, p := range live {
+			ordinal := int(p.doc)
 			gap := ordinal - previous
 			n := binary.PutUvarint(scratch[:], uint64(gap))
 			encoded = append(encoded, scratch[:n]...)
-			n = binary.PutUvarint(scratch[:], uint64(posting[id]))
+			n = binary.PutUvarint(scratch[:], uint64(p.tf))
 			encoded = append(encoded, scratch[:n]...)
 			previous = ordinal
 		}
@@ -89,15 +94,31 @@ func ReadSnapshot(source io.Reader) (*Index, error) {
 	if len(snapshot.Docs) != len(snapshot.Lengths) {
 		return nil, fmt.Errorf("corrupt snapshot: document length table mismatch")
 	}
+	if uint64(len(snapshot.Docs)) >= noDoc {
+		return nil, fmt.Errorf("snapshot has too many documents: %d", len(snapshot.Docs))
+	}
 
+	// Snapshot ordinals become slots directly: they are dense and every
+	// posting list is stored in ascending ordinal order.
 	index := NewIndex()
+	index.docs = snapshot.Docs
+	index.lengths = make([]uint32, len(snapshot.Docs))
+	index.live = make([]bool, len(snapshot.Docs))
 	for ordinal, doc := range snapshot.Docs {
-		index.docs[doc.ID] = doc
-		index.lengths[doc.ID] = snapshot.Lengths[ordinal]
-		index.tokens += int64(snapshot.Lengths[ordinal])
+		if _, duplicate := index.slots[doc.ID]; duplicate {
+			return nil, fmt.Errorf("corrupt snapshot: duplicate document %q", doc.ID)
+		}
+		length := snapshot.Lengths[ordinal]
+		if length < 0 || uint64(length) > math.MaxUint32 {
+			return nil, fmt.Errorf("corrupt snapshot: invalid length %d for %q", length, doc.ID)
+		}
+		index.slots[doc.ID] = uint32(ordinal)
+		index.lengths[ordinal] = uint32(length)
+		index.live[ordinal] = true
+		index.tokens += int64(length)
 	}
 	for term, encoded := range snapshot.Postings {
-		posting := make(map[string]int)
+		entry := &termPostings{}
 		previous := -1
 		for len(encoded) > 0 {
 			gap, n := binary.Uvarint(encoded)
@@ -106,18 +127,24 @@ func ReadSnapshot(source io.Reader) (*Index, error) {
 			}
 			encoded = encoded[n:]
 			frequency, n := binary.Uvarint(encoded)
-			if n <= 0 {
+			if n <= 0 || frequency > math.MaxUint32 {
 				return nil, fmt.Errorf("corrupt frequency for %q", term)
 			}
 			encoded = encoded[n:]
+			if gap == 0 || gap > uint64(len(snapshot.Docs)) {
+				return nil, fmt.Errorf("invalid document gap %d for %q", gap, term)
+			}
 			ordinal := previous + int(gap)
 			if ordinal < 0 || ordinal >= len(snapshot.Docs) {
 				return nil, fmt.Errorf("invalid document ordinal %d", ordinal)
 			}
-			posting[snapshot.Docs[ordinal].ID] = int(frequency)
+			entry.postings = append(entry.postings, posting{doc: uint32(ordinal), tf: uint32(frequency)})
+			entry.addImpact(uint32(frequency), index.lengths[ordinal])
 			previous = ordinal
 		}
-		index.postings[term] = posting
+		if entry.df = len(entry.postings); entry.df > 0 {
+			index.terms[term] = entry
+		}
 	}
 	return index, nil
 }
