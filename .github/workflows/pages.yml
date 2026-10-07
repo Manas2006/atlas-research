@@ -27,6 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/configure-pages@v6
+      - name: Add the public metadata-only Drive demo
+        run: cp docs/drive-inventory.json internal/atlas/ui/drive-inventory.json
       - uses: actions/upload-pages-artifact@v5
         with:
           path: internal/atlas/ui

@@ -33,3 +33,8 @@ test("impact layout has desktop and narrow viewport rules", () => {
   assert.match(css, /@media \(max-width: 460px\)[\s\S]*?\.impact-head/);
 });
 
+test("browser deployment loads a metadata-only Drive inventory demo", () => {
+  assert.match(app, /fetch\("drive-inventory\.json"\)/);
+  assert.match(app, /Metadata-only public demo/);
+  assert.match(app, /full text stays protected/);
+});

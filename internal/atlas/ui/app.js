@@ -1,8 +1,10 @@
 // Older releases seeded these exact IDs in browser storage. Keep user-created records.
 function browserRecords(key,seedIds){const records=load(key,[]);if(!Array.isArray(records))return[];const kept=records.filter(record=>!seedIds.includes(record.id));if(kept.length!==records.length){try{save(key,kept)}catch{}}return kept}
+let driveDemoEntries=[];
+function browserEntries(){return [...browserRecords("atlas.entries",["e1","e2","e3","e4"]),...driveDemoEntries]}
 const state = {
   view:viewFromHash(),
-  entries:browserRecords("atlas.entries",["e1","e2","e3","e4"]), runs:browserRecords("atlas.runs",["r1","r2","r3"]),
+  entries:browserEntries(), runs:browserRecords("atlas.runs",["r1","r2","r3"]),
   endpoint:load("atlas.endpoint","")||(location.port==="8088"?location.origin:""), connected:false, health:null, signals:null,
   query:"", filter:"All entries", mediaJobs:[], impacts:[], uploading:null
 };
@@ -24,9 +26,22 @@ function escapeHTML(value=""){return String(value).replace(/[&<>'"]/g,char=>({"&
 function relative(value){if(!value)return "—";const seconds=Math.max(0,(Date.now()-new Date(value).getTime())/1000);if(seconds<60)return "Now";if(seconds<3600)return `${Math.floor(seconds/60)}m`;if(seconds<86400)return `${Math.floor(seconds/3600)}h`;return `${Math.floor(seconds/86400)}d`}
 function api(path,options={}){return fetch(`${state.endpoint}${path}`,{...options,headers:{"Content-Type":"application/json",...(options.headers||{})}}).then(async response=>{if(!response.ok)throw new Error((await response.text())||response.statusText);return response.status===204?null:response.json()})}
 function modeLabel(){return state.connected?"Connected runtime":"Browser mode"}
-function heading(actions="",includeEntry=true){const [title,copy]=titles[state.view]||titles.overview;return `<section class="page-heading"><div><p class="eyebrow">${state.connected?"Live workspace":"Private browser workspace"}</p><h1>${title}</h1><p>${copy}</p></div><div class="heading-actions">${actions}${includeEntry?`<button class="button primary" data-action="new-entry">＋ New entry</button>`:""}</div></section>`}
+function heading(actions="",includeEntry=true){const [title,copy]=titles[state.view]||titles.overview;const workspace=state.connected?"Live workspace":driveDemoEntries.length?"Public Drive inventory demo":"Private browser workspace";return `<section class="page-heading"><div><p class="eyebrow">${workspace}</p><h1>${title}</h1><p>${copy}</p></div><div class="heading-actions">${actions}${includeEntry?`<button class="button primary" data-action="new-entry">＋ New entry</button>`:""}</div></section>`}
 
-function browserMode(){state.connected=false;state.health=null;state.signals=null;state.entries=browserRecords("atlas.entries",["e1","e2","e3","e4"]);state.runs=browserRecords("atlas.runs",["r1","r2","r3"]);state.mediaJobs=[];state.impacts=[];renderRuntime();render()}
+function browserMode(){state.connected=false;state.health=null;state.signals=null;state.entries=browserEntries();state.runs=browserRecords("atlas.runs",["r1","r2","r3"]);state.mediaJobs=[];state.impacts=[];renderRuntime();render()}
+async function loadDriveDemo(){
+  try{
+    const response=await fetch("drive-inventory.json");
+    if(!response.ok)return;
+    const inventory=await response.json();
+    driveDemoEntries=(inventory.records||[]).map(record=>({
+      id:`drive-demo:${record.id}`,title:record.title,type:record.type||"Research source",
+      body:`Metadata-only public demo for ${record.path}. ${record.status==="ready"?`${record.extracted_chars||0} characters are indexed in the protected Atlas runtime.`:`Not extracted: ${record.skip_reason||record.status}.`}`,
+      tags:["drive-inventory",...(record.tags||[]),record.status],updated_at:record.modified_at
+    }));
+    if(!state.connected){state.entries=browserEntries();render()}
+  }catch{}
+}
 async function refreshRuntime(){
   const [health,entries,runs,signals,jobs,impacts]=await Promise.all([api("/api/health"),api("/api/entries"),api("/api/runs"),api("/api/signals"),api("/api/video/v1/jobs"),api("/api/impact-experiments")]);
   state.health=health;state.entries=entries.entries||[];state.runs=runs.runs||[];state.signals=signals;state.mediaJobs=jobs.jobs||[];
@@ -68,7 +83,7 @@ function overviewView(){
   const running=state.runs.filter(run=>run.status==="Running").length+state.impacts.filter(item=>item.experiment.status==="running").length;
   const p95=state.connected&&state.signals?.search_samples?`${(state.signals.search_p95_microseconds/1000).toFixed(2)} ms`:"—";
   return heading()+`<section class="metric-grid">
-    ${metric(state.connected?"Indexed knowledge":"Saved knowledge",state.connected?state.health?.documents||0:state.entries.length,state.connected?"Searchable documents":"On this device","violet")}
+    ${metric(state.connected?"Indexed knowledge":driveDemoEntries.length?"Drive inventory":"Saved knowledge",state.connected?state.health?.documents||0:state.entries.length,state.connected?"Searchable documents":driveDemoEntries.length?"Metadata demo · full text stays protected":"On this device","violet")}
     ${metric("Active experiments",running,`${state.runs.length} runs · ${state.impacts.length} impact`,"cyan")}
     ${metric("Search p95",p95,state.connected?`${state.signals?.search_samples||0} recent queries`:"Connect a runtime","amber")}
     ${metric("Runtime requests",state.connected?state.signals?.requests||0:"—",state.connected?"Since startup":"Connect a runtime","green")}
@@ -115,7 +130,7 @@ function setView(view){state.view=view;location.hash=view;render()}
 function modal(content){document.querySelector("#modalRoot").innerHTML=`<div class="modal-backdrop"><section class="modal">${content}</section></div>`;document.querySelector(".modal-backdrop").addEventListener("mousedown",event=>event.target===event.currentTarget&&closeModal());document.querySelectorAll("[data-close]").forEach(button=>button.addEventListener("click",closeModal))}
 function closeModal(){document.querySelector("#modalRoot").innerHTML=""}
 function entryModal(){modal(`<button class="modal-close" data-close>×</button><p class="modal-kicker">Atlas workspace</p><h2>Index a new entry</h2><p class="modal-copy">Add material you want to retrieve alongside papers and experiment logs.</p><form id="entryForm" class="form"><label>Title<input name="title" autofocus required placeholder="Evaluation protocol notes"></label><label>Type<select name="type"><option>Note</option><option>Paper</option><option>Run log</option></select></label><label>Content<textarea name="body" rows="4" placeholder="Key ideas, findings, or decisions"></textarea></label><label>Tags<input name="tags" placeholder="evaluation, retrieval, benchmark"></label><div class="form-actions"><button type="button" class="button ghost" data-close>Cancel</button><button class="button primary">Index entry</button></div></form>`);document.querySelector("#entryForm").addEventListener("submit",saveEntry);document.querySelector("#entryForm input").focus()}
-async function saveEntry(event){event.preventDefault();const data=new FormData(event.target);let entry={title:data.get("title").trim(),type:data.get("type"),body:data.get("body").trim(),tags:data.get("tags").split(",").map(tag=>tag.trim()).filter(Boolean)};try{if(state.connected){entry=(await api("/api/entries",{method:"POST",body:JSON.stringify(entry)})).entry;if(state.health){state.health.entries++;state.health.documents++}}else{entry={...entry,id:crypto.randomUUID(),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};save("atlas.entries",[entry,...state.entries])}state.entries.unshift(entry);closeModal();render();toast(state.connected?"Entry persisted and indexed":"Entry saved on this device")}catch(error){toast(error.message)}}
+async function saveEntry(event){event.preventDefault();const data=new FormData(event.target);let entry={title:data.get("title").trim(),type:data.get("type"),body:data.get("body").trim(),tags:data.get("tags").split(",").map(tag=>tag.trim()).filter(Boolean)};try{if(state.connected){entry=(await api("/api/entries",{method:"POST",body:JSON.stringify(entry)})).entry;if(state.health){state.health.entries++;state.health.documents++}}else{entry={...entry,id:crypto.randomUUID(),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};save("atlas.entries",[entry,...state.entries.filter(item=>!item.id.startsWith("drive-demo:"))])}state.entries.unshift(entry);closeModal();render();toast(state.connected?"Entry persisted and indexed":"Entry saved on this device")}catch(error){toast(error.message)}}
 function runModal(){modal(`<button class="modal-close" data-close>×</button><p class="modal-kicker">Experiment registry</p><h2>Track a new run</h2><p class="modal-copy">Keep the model, dataset, status, score, and notes together for reproducibility.</p><form id="runForm" class="form"><label>Run name<input name="name" autofocus required placeholder="Retrieval sweep 018"></label><div class="form-split"><label>Model<input name="model" placeholder="BM25"></label><label>Dataset<input name="dataset" placeholder="wiki-100k"></label></div><label>Status<select name="status"><option>Running</option><option>Queued</option><option>Complete</option></select></label><label>Notes<textarea name="notes" rows="3" placeholder="Hypothesis or configuration"></textarea></label><div class="form-actions"><button type="button" class="button ghost" data-close>Cancel</button><button class="button primary">Create run</button></div></form>`);document.querySelector("#runForm").addEventListener("submit",saveRun);document.querySelector("#runForm input").focus()}
 async function saveRun(event){event.preventDefault();const data=new FormData(event.target);let run={name:data.get("name").trim(),model:data.get("model").trim(),dataset:data.get("dataset").trim(),status:data.get("status"),notes:data.get("notes").trim()};try{if(state.connected){run=(await api("/api/runs",{method:"POST",body:JSON.stringify(run)})).run;if(state.health)state.health.runs++}else{run={...run,id:crypto.randomUUID(),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};save("atlas.runs",[run,...state.runs])}state.runs.unshift(run);closeModal();render();toast("Experiment registered")}catch(error){toast(error.message)}}
 function impactModal(){modal(`<button class="modal-close" data-close>×</button><p class="modal-kicker">Impact experiments</p><h2>Measure treatment lift</h2><p class="modal-copy">Define the outcome and holdout before assigning subjects. Synthetic identifiers only.</p><form id="impactForm" class="form"><label>Name<input name="name" autofocus required placeholder="Campaign conversion lift"></label><label>Hypothesis<textarea name="hypothesis" rows="2" required placeholder="The campaign causes conversions that would not otherwise occur."></textarea></label><div class="form-split"><label>Success outcome<input name="outcome" required value="conversion"></label><label>Treatment allocation<input name="allocation" type="number" min="0.01" max="0.99" step="0.01" value="0.50"></label></div><div class="form-split"><label>Observation window (hours)<input name="window" type="number" min="1" value="168"></label><label>Analysis live doc ID<input name="doc" placeholder="Optional"></label></div><div class="form-actions"><button type="button" class="button ghost" data-close>Cancel</button><button class="button primary">Create draft</button></div></form>`);document.querySelector("#impactForm").addEventListener("submit",saveImpact);document.querySelector("#impactForm input").focus()}
@@ -133,5 +148,5 @@ document.querySelector("#runtimeButton").addEventListener("click",connectionModa
 document.querySelector("#commandButton").addEventListener("click",commandModal);
 window.addEventListener("hashchange",()=>{state.view=viewFromHash();render()});
 window.addEventListener("keydown",event=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="k"){event.preventDefault();commandModal()}if(event.key==="Escape")closeModal();if(!event.metaKey&&!event.ctrlKey&&!event.altKey&&/^[1-6]$/.test(event.key)&&!["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName||""))setView(Object.keys(titles)[Number(event.key)-1])});
-renderRuntime();render();connect();
+renderRuntime();render();loadDriveDemo();connect();
 setInterval(refreshLiveData,15000);
