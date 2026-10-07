@@ -37,4 +37,5 @@ test("browser deployment loads a metadata-only Drive inventory demo", () => {
   assert.match(app, /fetch\("drive-inventory\.json"\)/);
   assert.match(app, /Metadata-only public demo/);
   assert.match(app, /full text stays protected/);
+  assert.match(app, /searchCount/);
 });
