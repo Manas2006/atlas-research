@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Manas2006/distributed-systems-portfolio/internal/collab"
 	"github.com/Manas2006/distributed-systems-portfolio/internal/search"
 	"github.com/Manas2006/distributed-systems-portfolio/internal/tsdb"
 	"github.com/Manas2006/distributed-systems-portfolio/internal/video"
@@ -25,6 +26,8 @@ var interfaceFiles embed.FS
 
 type Server struct {
 	catalog     *Catalog
+	docs        *collab.Store
+	origins     []string
 	index       *search.Index
 	wal         *search.WAL
 	metrics     *tsdb.Store
@@ -40,7 +43,21 @@ type SearchResult struct {
 	Score float64 `json:"score"`
 }
 
-func Open(dataDir string) (*Server, error) {
+// Options configures optional parts of the runtime.
+type Options struct {
+	// Writer enables the model-backed Writer agent in live docs when set.
+	Writer *collab.LLMConfig
+	// AllowedOrigins limits which web pages may call the API from a
+	// browser, for example https://manas2006.github.io. Pages served by this
+	// process are always allowed. Empty keeps the original behaviour of
+	// allowing any page, which suits a runtime that only listens on
+	// localhost and is wrong for one a whole lab can reach.
+	AllowedOrigins []string
+}
+
+func Open(dataDir string) (*Server, error) { return OpenWithOptions(dataDir, Options{}) }
+
+func OpenWithOptions(dataDir string, options Options) (*Server, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err
 	}
@@ -77,10 +94,81 @@ func Open(dataDir string) (*Server, error) {
 		wal.Close()
 		return nil, err
 	}
-	return &Server{catalog: catalog, index: index, wal: wal, metrics: metrics, video: (&video.API{Queue: queue, Store: objects}).Handler(), started: time.Now().UTC()}, nil
+	server := &Server{catalog: catalog, index: index, wal: wal, metrics: metrics, video: (&video.API{Queue: queue, Store: objects}).Handler(), started: time.Now().UTC()}
+	for _, origin := range options.AllowedOrigins {
+		if origin = strings.TrimRight(strings.TrimSpace(origin), "/"); origin != "" {
+			server.origins = append(server.origins, origin)
+		}
+	}
+
+	// Live docs keep their own durable operation logs. Their text is indexed
+	// here in memory and rebuilt from those logs on every start, so it never
+	// needs a second copy in the knowledge WAL.
+	collabOptions := collab.Options{Search: server.agentSearch, OnChange: server.indexDoc}
+	if options.Writer != nil {
+		writer, err := collab.NewWriter(*options.Writer)
+		if err != nil {
+			metrics.Close()
+			wal.Close()
+			return nil, err
+		}
+		collabOptions.Agents = append(collabOptions.Agents, writer)
+	}
+	docs, err := collab.OpenStore(filepath.Join(dataDir, "docs"), collabOptions)
+	if err != nil {
+		metrics.Close()
+		wal.Close()
+		return nil, err
+	}
+	server.docs = docs
+	docs.Each(server.indexDoc)
+	return server, nil
+}
+
+const docPrefix = "doc:"
+
+func (s *Server) indexDoc(info collab.DocInfo, text string) {
+	s.index.Upsert(search.Document{ID: docPrefix + info.ID, Title: info.Title, Body: text})
+}
+
+// snippet flattens text to one line of at most limit runes.
+func snippet(text string, limit int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if runes := []rune(text); len(runes) > limit {
+		return strings.TrimSpace(string(runes[:limit])) + "..."
+	}
+	return text
+}
+
+// lookup resolves a search hit to something displayable, whether it is a
+// catalog entry or a live doc.
+func (s *Server) lookup(id string) (Entry, bool) {
+	// Docs are checked first so a catalog entry cannot pose as one by
+	// borrowing its id.
+	if docID, isDoc := strings.CutPrefix(id, docPrefix); isDoc {
+		summary, ok := s.docs.Summary(docID)
+		if !ok {
+			return Entry{}, false
+		}
+		return Entry{ID: id, Title: summary.Title, Body: snippet(summary.Snippet, 280), Type: "Doc", Tags: []string{}, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt}, true
+	}
+	return s.catalog.Entry(id)
+}
+
+// agentSearch is the read-only view of Atlas that agents in live docs get.
+func (s *Server) agentSearch(query string, limit int) []collab.Hit {
+	hits := make([]collab.Hit, 0, limit)
+	for _, result := range s.index.Search(query, limit) {
+		if entry, ok := s.lookup(result.ID); ok {
+			hits = append(hits, collab.Hit{ID: entry.ID, Title: entry.Title, Type: entry.Type, Snippet: snippet(entry.Body, 160), Score: result.Score})
+		}
+	}
+	return hits
 }
 
 func (s *Server) Close() error {
+	// Docs first: each session flushes the edits it has already accepted.
+	_ = s.docs.Close()
 	if err := s.metrics.Close(); err != nil {
 		_ = s.wal.Close()
 		return err
@@ -100,6 +188,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/signals", s.signals)
 	mux.Handle("/api/metrics/", http.StripPrefix("/api/metrics", (&tsdb.API{Store: s.metrics}).Handler()))
 	mux.Handle("/api/video/", http.StripPrefix("/api/video", s.video))
+	docs := s.docs.Handler()
+	mux.Handle("/api/docs", docs)
+	mux.Handle("/api/docs/", docs)
+	mux.Handle("/api/agents", docs)
 	assets, _ := fs.Sub(interfaceFiles, "ui")
 	mux.Handle("/", http.FileServerFS(assets))
 	return s.cors(s.observe(mux))
@@ -107,7 +199,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	entries, runs := s.catalog.Counts()
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mode": "connected", "uptime_seconds": int64(time.Since(s.started).Seconds()), "documents": s.index.Len(), "entries": entries, "runs": runs, "metric_series": s.metrics.SeriesCount()})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mode": "connected", "uptime_seconds": int64(time.Since(s.started).Seconds()), "documents": s.index.Len(), "entries": entries, "runs": runs, "docs": s.docs.Count(), "metric_series": s.metrics.SeriesCount()})
 }
 
 func (s *Server) entries(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +247,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	s.searchMu.Unlock()
 	results := make([]SearchResult, 0, len(ranked))
 	for _, result := range ranked {
-		if entry, ok := s.catalog.Entry(result.ID); ok {
+		if entry, ok := s.lookup(result.ID); ok {
 			results = append(results, SearchResult{Entry: entry, Score: result.Score})
 		}
 	}
@@ -219,6 +311,12 @@ func (s *Server) observe(next http.Handler) http.Handler {
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		if origin != "" && !s.originAllowed(origin, r.Host) {
+			// This also covers WebSocket upgrades, which browsers send
+			// with an Origin header but do not subject to CORS.
+			http.Error(w, "origin not allowed", http.StatusForbidden)
+			return
+		}
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
@@ -232,6 +330,21 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) originAllowed(origin, host string) bool {
+	if len(s.origins) == 0 {
+		return true
+	}
+	if _, sameHost, found := strings.Cut(origin, "://"); found && sameHost == host {
+		return true
+	}
+	for _, allowed := range s.origins {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
