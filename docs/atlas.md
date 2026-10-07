@@ -12,7 +12,7 @@ The console has two useful modes:
    stored, appended to the search WAL, and indexed with BM25. Signals come from
    the running process, metrics use Chronos, and media uploads use StreamForge.
 
-Use the Runtime control at the bottom of the sidebar to change modes. Connection
+Use the Runtime control under the navigation to change modes. Connection
 settings stay on the current device.
 
 ## Local data
@@ -85,6 +85,18 @@ suggestion and `by` naming who accepted it.
 If a doc's log cannot be replayed, Atlas starts without that doc, lists it as
 damaged on the Live docs page, and leaves the file as it found it. See the
 [design note](live-docs.md) for the protocol and its limits.
+
+## Look
+
+The console follows the HUMAIN Lab website: an off-white page (`#faf9f6`),
+black ink, hairline rules (`#d1d1d1`), Libre Baskerville for text and
+JetBrains Mono for figures and code. The colors and typefaces are variables
+at the top of `internal/atlas/ui/styles.css`, so a change to the lab's palette
+is a change in one place.
+
+Both typefaces are served by Atlas itself from `internal/atlas/ui/fonts`, so
+the console looks the same with no network. They are licensed under the SIL
+Open Font License; the license texts sit beside the font files.
 
 ## Extending the distributed topology
 
