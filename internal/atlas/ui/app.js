@@ -34,11 +34,8 @@ async function loadDriveDemo(){
     const response=await fetch("drive-inventory.json");
     if(!response.ok)return;
     const inventory=await response.json();
-    driveDemoEntries=(inventory.records||[]).map(record=>({
-      id:`drive-demo:${record.id}`,title:record.title,type:record.type||"Research source",
-      body:`Metadata-only public demo for ${record.path}. ${record.status==="ready"?`${record.extracted_chars||0} characters are indexed in the protected Atlas runtime.`:`Not extracted: ${record.skip_reason||record.status}.`}`,
-      tags:["drive-inventory",...(record.tags||[]),record.status],updated_at:record.modified_at
-    }));
+    // Sensitive records arrive redacted; inventory.js labels them and no entry carries a link.
+    driveDemoEntries=AtlasInventory.entries(inventory);
     if(!state.connected){state.entries=browserEntries();render()}
   }catch{}
 }

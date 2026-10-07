@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: '24'
       - run: |
-          for file in ot collab docs app; do
+          for file in ot collab docs inventory app; do
             node --check "internal/atlas/ui/$file.js"
           done
       - run: node --test internal/atlas/uitests/*.test.js

@@ -1,7 +1,6 @@
 {
   "version": 1,
   "generated_at": "2026-10-07T00:00:00Z",
-  "source_root": "https://drive.google.com/drive/folders/12FcNICgNTG3ibr4WCjEOspvCs3OV-Lhp",
   "summary": {
     "subfolders": 8,
     "folders_including_root": 9,
@@ -12,39 +11,30 @@
   },
   "folders": [
     {
-      "id": "12FcNICgNTG3ibr4WCjEOspvCs3OV-Lhp",
       "path": "/"
     },
     {
-      "id": "1uXFgkR0Pc6e2uOXxu3OhyOynZZvGIxs3",
       "path": "fall 2026"
     },
     {
-      "id": "1FAkG3qWbBJcY4hKFPA-OIazzuE-6SeaW",
       "path": "fall 2026/private"
     },
     {
-      "id": "1-HXOXJ1w8mRRuul6KpnoGc0DYZmLkUUa",
       "path": "spring 2026"
     },
     {
-      "id": "1_z3J3xTyLpan0BOI3bQ_aGYJpdq8wi3N",
       "path": "fall 2025"
     },
     {
-      "id": "1fQW-y2E7fCbkxMcRZLNGaeWeCTnBz_Le",
       "path": "spring 2025"
     },
     {
-      "id": "1PJyTbl_W61CKeCf2B0XgSI9ZfxrztBjO",
       "path": "lab wiki"
     },
     {
-      "id": "1MS1xlH_dCkhOkFAAWPm-4fTmM3OtxZw9",
       "path": "fall 2024"
     },
     {
-      "id": "1YePWnipaDCAHR8Ey_Az2UOn3-gyyjG0Y",
       "path": "servers"
     }
   ],
@@ -162,13 +152,12 @@
       "extracted_chars": 2851
     },
     {
-      "id": "1unF3edRUxC7PjzsFghx2liy4fTfuNBpyzmWIemIGXmA",
+      "id": "redacted-5017d7cfaa9d",
       "title": "Copy of Meeting Sign Up Sheet",
       "type": "Spreadsheet",
       "tags": [
         "fall-2024"
       ],
-      "url": "https://docs.google.com/spreadsheets/d/1unF3edRUxC7PjzsFghx2liy4fTfuNBpyzmWIemIGXmA/edit?usp=drivesdk",
       "path": "fall 2024/Copy of Meeting Sign Up Sheet",
       "mime_type": "application/vnd.google-apps.spreadsheet",
       "modified_at": "2025-09-08T17:09:37.478Z",
@@ -178,13 +167,12 @@
       "extracted_chars": 2499
     },
     {
-      "id": "1z74yd2TL7T0eCk26xbuT5gZ_ifIE12cJEL8osi2Vrh0",
+      "id": "redacted-72c2f0bb9181",
       "title": "Deadlines",
       "type": "Spreadsheet",
       "tags": [
         "fall-2024"
       ],
-      "url": "https://docs.google.com/spreadsheets/d/1z74yd2TL7T0eCk26xbuT5gZ_ifIE12cJEL8osi2Vrh0/edit?usp=drivesdk",
       "path": "fall 2024/Deadlines",
       "mime_type": "application/vnd.google-apps.spreadsheet",
       "modified_at": "2024-08-26T02:31:56.710Z",
@@ -209,13 +197,12 @@
       "extracted_chars": 0
     },
     {
-      "id": "1hEZpY-5BDQqZjMe79lwtFn0qXnpdaslIfDPQFGfwiHE",
+      "id": "redacted-5c0f36b8f9bc",
       "title": "Meeting Sign Up Sheet",
       "type": "Spreadsheet",
       "tags": [
         "fall-2024"
       ],
-      "url": "https://docs.google.com/spreadsheets/d/1hEZpY-5BDQqZjMe79lwtFn0qXnpdaslIfDPQFGfwiHE/edit?usp=drivesdk",
       "path": "fall 2024/Meeting Sign Up Sheet",
       "mime_type": "application/vnd.google-apps.spreadsheet",
       "modified_at": "2024-10-14T23:13:11.012Z",
@@ -337,13 +324,12 @@
       "extracted_chars": 33736
     },
     {
-      "id": "1wDUbGZu1ICBgylGSG7hHYh8DWX3J7isWGIpcLoLH-D8",
+      "id": "redacted-651db372d4c8",
       "title": "Fall 25 Meeting Sign-up Sheet",
       "type": "Spreadsheet",
       "tags": [
         "fall-2025"
       ],
-      "url": "https://docs.google.com/spreadsheets/d/1wDUbGZu1ICBgylGSG7hHYh8DWX3J7isWGIpcLoLH-D8/edit?usp=drivesdk",
       "path": "fall 2025/Fall 25 Meeting Sign-up Sheet",
       "mime_type": "application/vnd.google-apps.spreadsheet",
       "modified_at": "2025-12-08T19:35:45.951Z",
@@ -449,13 +435,12 @@
       "extracted_chars": 23451
     },
     {
-      "id": "1GHIrQyUUSfyipTFKBhWA9zi6Qybz0CwmhJvCaf69Id4",
+      "id": "redacted-77d85c51918b",
       "title": "Lab Accounts",
       "type": "Lab wiki",
       "tags": [
         "lab-wiki"
       ],
-      "url": "https://docs.google.com/document/d/1GHIrQyUUSfyipTFKBhWA9zi6Qybz0CwmhJvCaf69Id4/edit?usp=drivesdk",
       "path": "lab wiki/Lab Accounts",
       "mime_type": "application/vnd.google-apps.document",
       "modified_at": "2025-01-16T18:40:31.397Z",
@@ -465,13 +450,12 @@
       "extracted_chars": 126
     },
     {
-      "id": "1yW1xGg6KXiyiZH7IFWsEvYBUg3YU7nbflaGbb8plJhA",
+      "id": "redacted-7664057e1c6b",
       "title": "Local Connection to Models Hosted on Vista",
       "type": "Lab wiki",
       "tags": [
         "lab-wiki"
       ],
-      "url": "https://docs.google.com/document/d/1yW1xGg6KXiyiZH7IFWsEvYBUg3YU7nbflaGbb8plJhA/edit?usp=drivesdk",
       "path": "lab wiki/Local Connection to Models Hosted on Vista",
       "mime_type": "application/vnd.google-apps.document",
       "modified_at": "2026-03-03T22:19:30.946Z",
@@ -481,13 +465,12 @@
       "extracted_chars": 1217
     },
     {
-      "id": "1o9D_G8I9P6IWtHH78AeFW1BzPeSFlFrxtYiFT2Y-xc4",
+      "id": "redacted-1931727ad429",
       "title": "Mailing List / Groups at UT",
       "type": "Lab wiki",
       "tags": [
         "lab-wiki"
       ],
-      "url": "https://docs.google.com/document/d/1o9D_G8I9P6IWtHH78AeFW1BzPeSFlFrxtYiFT2Y-xc4/edit?usp=drivesdk",
       "path": "lab wiki/Mailing List - Groups at UT",
       "mime_type": "application/vnd.google-apps.document",
       "modified_at": "2024-10-10T21:07:53.922Z",
@@ -513,13 +496,12 @@
       "extracted_chars": 902
     },
     {
-      "id": "1hhH54yJjvu9NSg-IStHSDZb7U9xU5wTlXGfXb_IRqPE",
+      "id": "redacted-a80aab2d06da",
       "title": "Slack Organization",
       "type": "Lab wiki",
       "tags": [
         "lab-wiki"
       ],
-      "url": "https://docs.google.com/document/d/1hhH54yJjvu9NSg-IStHSDZb7U9xU5wTlXGfXb_IRqPE/edit?usp=drivesdk",
       "path": "lab wiki/Slack Organization",
       "mime_type": "application/vnd.google-apps.document",
       "modified_at": "2024-08-27T23:07:41.841Z",
@@ -529,13 +511,12 @@
       "extracted_chars": 1981
     },
     {
-      "id": "1a29HLczqK0svpBsR_i9g0yfAEFHgwGV0",
+      "id": "redacted-3a3aa248865e",
       "title": "TACC-Lonestar6",
       "type": "Lab wiki",
       "tags": [
         "lab-wiki"
       ],
-      "url": "https://drive.google.com/file/d/1a29HLczqK0svpBsR_i9g0yfAEFHgwGV0/view?usp=drivesdk",
       "path": "lab wiki/TACC-Lonestar6",
       "mime_type": "application/vnd.google-apps.shortcut",
       "modified_at": "2024-08-26T02:30:02.781Z",
@@ -545,13 +526,12 @@
       "extracted_chars": 0
     },
     {
-      "id": "1oDN6Xze5XSi5tSE3dj2NfbsYNdwYurzkX6Ow0aRNYsM",
+      "id": "redacted-13d38c403b9c",
       "title": "TACC-Vista-setup",
       "type": "Lab wiki",
       "tags": [
         "lab-wiki"
       ],
-      "url": "https://docs.google.com/document/d/1oDN6Xze5XSi5tSE3dj2NfbsYNdwYurzkX6Ow0aRNYsM/edit?usp=drivesdk",
       "path": "lab wiki/TACC-Vista-setup",
       "mime_type": "application/vnd.google-apps.document",
       "modified_at": "2026-03-06T03:16:38.277Z",
@@ -561,13 +541,12 @@
       "extracted_chars": 9228
     },
     {
-      "id": "1kA4Xj_mcrcMsAl15Uyj0eyKq5FtBJjQv",
+      "id": "redacted-35546f8abd07",
       "title": "TACC resource allocation proposal.docx",
       "type": "Research note",
       "tags": [
         "servers"
       ],
-      "url": "https://docs.google.com/document/d/1kA4Xj_mcrcMsAl15Uyj0eyKq5FtBJjQv/edit?usp=drivesdk&ouid=103163630199868627515&rtpof=true&sd=true",
       "path": "servers/TACC resource allocation proposal.docx",
       "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "modified_at": "2026-02-23T19:34:18.000Z",
@@ -625,13 +604,12 @@
       "extracted_chars": 29567
     },
     {
-      "id": "1Nrsi2q_UhvwWGbgJdeUW4SaXngxTMpk9Xr3Ze-JciR8",
+      "id": "redacted-f4c5445fd68d",
       "title": "2026spring-lab-schedule",
       "type": "Spreadsheet",
       "tags": [
         "spring-2026"
       ],
-      "url": "https://docs.google.com/spreadsheets/d/1Nrsi2q_UhvwWGbgJdeUW4SaXngxTMpk9Xr3Ze-JciR8/edit?usp=drivesdk",
       "path": "spring 2026/2026spring-lab-schedule",
       "mime_type": "application/vnd.google-apps.spreadsheet",
       "modified_at": "2026-03-02T20:02:11.677Z",

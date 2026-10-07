@@ -15,7 +15,7 @@ test-java:
 	cd engineering-labs/pulse-analytics && mvn --batch-mode test
 
 test-js:
-	for file in ot collab docs app; do node --check "internal/atlas/ui/$$file.js"; done
+	for file in ot collab docs inventory app; do node --check "internal/atlas/ui/$$file.js"; done
 	node --test internal/atlas/uitests/*.test.js
 
 test-e2e:

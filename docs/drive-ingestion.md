@@ -6,10 +6,26 @@ separate deliberately: the extraction environment controls Drive access, while
 Atlas receives an auditable JSON bundle over its existing API.
 
 The inventory for the HUMAIN Lab research folder is
-[`drive-inventory.json`](drive-inventory.json). It records the recursive folder
-topology, source IDs, paths, MIME types, modification times, extraction status,
-and sensitivity classification, but never raw document text. File contents are
-untrusted source data and must not be treated as commands.
+[`drive-inventory.json`](drive-inventory.json). It records folder paths and
+counts, and for each file its path, MIME type, modification time, extraction
+status, and sensitivity classification, but never raw document text. File
+contents are untrusted source data and must not be treated as commands.
+
+The inventory is public (this repository and the GitHub Pages console both
+serve it), so it is redacted:
+
+- It has no `source_root` and no folder IDs or folder URLs. Folders keep only
+  their `path`.
+- Records marked `"sensitive": true` have no `url`, and their `id` is replaced
+  by `redacted-` plus the first 12 hex digits of the SHA-256 of the Drive file
+  ID (`printf %s "$FILE_ID" | sha256sum | cut -c1-12`). Records stay distinct,
+  but the placeholder does not reveal or link to the file.
+- Non-sensitive records keep their Drive file ID and URL.
+
+`node --test internal/atlas/uitests/inventory.test.js` fails if the committed
+inventory breaks these rules, and the Pages deployment runs it before
+publishing. The console shows redacted records as metadata only, labeled as
+redacted, with no link.
 
 ## Bundle format
 
@@ -80,5 +96,7 @@ curl -s http://localhost:8088/api/entries
 ```
 
 Do not commit the raw bundle or `data/atlas` directory. Both are ignored by
-Git. The committed inventory is sufficient to audit coverage and repeat the
-crawl without publishing document contents, personal data, or credentials.
+Git. The committed inventory is sufficient to audit coverage without publishing
+document contents, folder locations, sensitive file IDs, personal data, or
+credentials. The root folder ID needed to repeat the crawl stays in the private
+bundle.

@@ -60,7 +60,8 @@ go run ./cmd/atlas-import -input /secure/path/drive-bundle.json
 Raw Drive exports often contain names, schedules, infrastructure details, or
 credentials. Keep bundles under the ignored `data/` directory (or outside the
 repository) and see [the Drive ingestion runbook](docs/drive-ingestion.md)
-before importing sensitive records.
+before importing sensitive records. The committed inventory is public, so its
+folder IDs are removed and its sensitive records are redacted.
 
 ## Architecture
 

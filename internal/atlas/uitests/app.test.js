@@ -35,7 +35,8 @@ test("impact layout has desktop and narrow viewport rules", () => {
 
 test("browser deployment loads a metadata-only Drive inventory demo", () => {
   assert.match(app, /fetch\("drive-inventory\.json"\)/);
-  assert.match(app, /Metadata-only public demo/);
+  assert.match(app, /AtlasInventory\.entries\(inventory\)/);
+  assert.match(html, /<script src="inventory\.js" defer><\/script>\s*<script src="app\.js" defer><\/script>/);
   assert.match(app, /full text stays protected/);
   assert.match(app, /searchCount/);
 });
