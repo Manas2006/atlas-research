@@ -710,6 +710,9 @@ const AtlasDocs = (() => {
   }
 
   window.addEventListener("resize", () => { if (ui.client && ui.root) paint(); });
+  // Carets are placed from measured text positions, which move when the web
+  // font replaces the fallback it was first laid out in.
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", () => { if (ui.client && ui.root) paint(); });
   window.addEventListener("beforeunload", event => {
     if (hasPending(ui.client) || [...ui.retiring].some(hasPending)) { event.preventDefault(); event.returnValue = ""; }
   });

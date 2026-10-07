@@ -49,7 +49,7 @@ For the Go console without Docker:
 make atlas
 ```
 
-Open the Runtime control in the sidebar to switch between browser mode and a
+Open the Runtime control under the navigation to switch between browser mode and a
 local API. The console served by the Go process connects automatically because
 it shares the same origin.
 

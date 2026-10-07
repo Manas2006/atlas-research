@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"io/fs"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +24,12 @@ import (
 
 //go:embed ui/*
 var interfaceFiles embed.FS
+
+func init() {
+	// Go's built-in table has no entry for web fonts, and a minimal container
+	// has no system table to fall back on.
+	_ = mime.AddExtensionType(".woff2", "font/woff2")
+}
 
 type Server struct {
 	catalog     *Catalog
